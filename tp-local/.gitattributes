@@ -1,0 +1,15 @@
+# Force LF line endings in the working tree:
+# - shell scripts are executed inside WSL, where CRLF breaks bash
+#   ("$'\r': command not found");
+# - `terraform fmt -check` then gives identical results on Windows and CI.
+* text=auto eol=lf
+
+*.sh         text eol=lf
+*.tf         text eol=lf
+*.tfvars     text eol=lf
+*.tftest.hcl text eol=lf
+*.hcl        text eol=lf
+*.yaml       text eol=lf
+*.yml        text eol=lf
+*.md         text eol=lf
+*.ps1        text eol=crlf

@@ -1,0 +1,71 @@
+# -----------------------------------------------------------------------------
+# Terraform
+# -----------------------------------------------------------------------------
+
+# Local working directories (provider binaries, module cache, backend cache).
+**/.terraform/*
+
+# State files. tp-local uses LOCAL state, stored by default outside the
+# repository (~/.local/state/tp-local, see scripts/tf-init.sh). Any state file
+# that ends up in the working tree must never be committed.
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Saved plans can contain sensitive values in clear text.
+*.tfplan
+*.tfplan.json
+tfplan
+tfplan.json
+
+# Crash logs can contain sensitive values.
+crash.log
+crash.*.log
+
+# Variable files for secrets or personal values.
+# NOTE: environments/*/terraform.tfvars IS committed and must only hold
+# non-sensitive values.
+*.secret.tfvars
+*.local.tfvars
+*.local.auto.tfvars
+
+# Local-only override files.
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform CLI configuration files.
+.terraformrc
+terraform.rc
+
+# Child modules do not ship a lock file; root lock files MUST be committed.
+modules/**/.terraform.lock.hcl
+
+# -----------------------------------------------------------------------------
+# Kubernetes credentials and local tooling
+# -----------------------------------------------------------------------------
+
+# Exported kubeconfigs embed the MicroK8s admin client certificate.
+kubeconfig
+*.kubeconfig
+*kubeconfig*.yaml
+microk8s*.yaml
+
+.env
+.env.*
+.envrc
+.tflint.d/
+
+# Test scratch directories created by the script test suite.
+**/scripts/tests/.work/
+
+# -----------------------------------------------------------------------------
+# Editors / OS
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
