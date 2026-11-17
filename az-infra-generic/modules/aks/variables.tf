@@ -266,16 +266,199 @@ variable "run_command_enabled" {
 }
 
 # =============================================================================
+# Networking
+# =============================================================================
+
+variable "network" {
+  description = <<-EOT
+    Azure CNI configuration (the network plugin is always `azure`).
+    - cni_mode: "overlay" (recommended; pods get IPs from pod_cidr, VNet IPs are only used by nodes)
+      or "vnet" (pods get VNet IPs, from the node subnet or from node pools' pod_subnet_id).
+    - data_plane: "cilium" (Azure CNI Powered by Cilium, recommended) or "azure".
+    - policy: "cilium" (requires data_plane = cilium), "calico", "azure" or "none".
+    - pod_cidr: overlay pod range (ignored in vnet mode). service_cidr / dns_service_ip: Kubernetes
+      service range and kube-dns IP; they must not overlap the VNet, peered networks or pod_cidr.
+    - outbound_type: loadBalancer, managedNATGateway, userAssignedNATGateway (NAT gateway attached to
+      the node subnet), userDefinedRouting (route table on the node subnet, e.g. via Azure Firewall) or none.
+    - load_balancer_profile / nat_gateway_profile: optional egress tuning for loadBalancer / managedNATGateway.
+    Changing most of these values recreates the cluster.
+  EOT
+  type = object({
+    cni_mode       = optional(string, "overlay")
+    data_plane     = optional(string, "cilium")
+    policy         = optional(string, "cilium")
+    pod_cidr       = optional(string, "10.244.0.0/16")
+    service_cidr   = optional(string, "172.16.0.0/16")
+    dns_service_ip = optional(string, "172.16.0.10")
+    outbound_type  = optional(string, "loadBalancer")
+    load_balancer_profile = optional(object({
+      managed_outbound_ip_count = optional(number)
+      outbound_ip_address_ids   = optional(list(string))
+      outbound_ip_prefix_ids    = optional(list(string))
+      idle_timeout_in_minutes   = optional(number)
+      outbound_ports_allocated  = optional(number)
+    }))
+    nat_gateway_profile = optional(object({
+      managed_outbound_ip_count = optional(number)
+      idle_timeout_in_minutes   = optional(number)
+    }))
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["overlay", "vnet"], var.network.cni_mode)
+    error_message = "network.cni_mode must be \"overlay\" or \"vnet\"."
+  }
+
+  validation {
+    condition     = contains(["cilium", "azure"], var.network.data_plane) && contains(["cilium", "calico", "azure", "none"], var.network.policy)
+    error_message = "network.data_plane must be cilium or azure; network.policy must be cilium, calico, azure or none."
+  }
+
+  validation {
+    condition     = (var.network.data_plane == "cilium") == (var.network.policy == "cilium")
+    error_message = "The cilium data plane always enforces cilium network policies: use data_plane = \"cilium\" with policy = \"cilium\" (or another policy with data_plane = \"azure\")."
+  }
+
+  validation {
+    condition     = can(cidrhost(var.network.service_cidr, 0)) && can(cidrhost(var.network.pod_cidr, 0)) && can(cidrhost("${var.network.dns_service_ip}/32", 0))
+    error_message = "network.service_cidr and network.pod_cidr must be valid CIDR ranges and network.dns_service_ip a valid IPv4 address."
+  }
+
+  validation {
+    # dns_service_ip must belong to service_cidr and must not be its network
+    # address nor its first host (reserved for the kubernetes API service).
+    condition = try(
+      cidrhost("${var.network.dns_service_ip}/${split("/", var.network.service_cidr)[1]}", 0) == cidrhost(var.network.service_cidr, 0) &&
+      var.network.dns_service_ip != cidrhost(var.network.service_cidr, 0) &&
+      var.network.dns_service_ip != cidrhost(var.network.service_cidr, 1),
+      false,
+    )
+    error_message = "network.dns_service_ip must be inside network.service_cidr and must not be its first two addresses (e.g. 172.16.0.10 for 172.16.0.0/16)."
+  }
+
+  validation {
+    # Two ranges overlap when their network addresses match at the shorter prefix.
+    # Malformed ranges are reported by the format validation above.
+    condition = var.network.cni_mode != "overlay" ? true : try(
+      cidrhost("${split("/", var.network.pod_cidr)[0]}/${min(tonumber(split("/", var.network.pod_cidr)[1]), tonumber(split("/", var.network.service_cidr)[1]))}", 0) !=
+      cidrhost("${split("/", var.network.service_cidr)[0]}/${min(tonumber(split("/", var.network.pod_cidr)[1]), tonumber(split("/", var.network.service_cidr)[1]))}", 0),
+      true,
+    )
+    error_message = "network.pod_cidr and network.service_cidr must not overlap."
+  }
+
+  validation {
+    condition     = contains(["loadBalancer", "managedNATGateway", "userAssignedNATGateway", "userDefinedRouting", "none"], var.network.outbound_type)
+    error_message = "network.outbound_type must be loadBalancer, managedNATGateway, userAssignedNATGateway, userDefinedRouting or none."
+  }
+
+  validation {
+    condition     = var.network.load_balancer_profile == null || var.network.outbound_type == "loadBalancer"
+    error_message = "network.load_balancer_profile can only be set with outbound_type = \"loadBalancer\"."
+  }
+
+  validation {
+    condition     = var.network.nat_gateway_profile == null || var.network.outbound_type == "managedNATGateway"
+    error_message = "network.nat_gateway_profile can only be set with outbound_type = \"managedNATGateway\"."
+  }
+
+  validation {
+    condition = var.network.load_balancer_profile == null ? true : length([
+      for v in [
+        var.network.load_balancer_profile.managed_outbound_ip_count,
+        var.network.load_balancer_profile.outbound_ip_address_ids,
+        var.network.load_balancer_profile.outbound_ip_prefix_ids,
+      ] : v if v != null
+    ]) <= 1
+    error_message = "network.load_balancer_profile: managed_outbound_ip_count, outbound_ip_address_ids and outbound_ip_prefix_ids are mutually exclusive."
+  }
+}
+
+variable "private_cluster_enabled" {
+  description = "Expose the API server only on a private IP inside the cluster VNet. Operators and CI/CD then need private connectivity (VPN, peering, Bastion, self-hosted runners). Forces a new cluster when changed."
+  type        = bool
+  default     = false
+}
+
+variable "private_dns_zone_id" {
+  description = "Private cluster DNS: \"System\" (AKS-managed zone), \"None\" (bring your own DNS resolution) or the resource ID of an existing privatelink.<region>.azmk8s.io zone. A custom zone requires a user-assigned identity that already holds Private DNS Zone Contributor on it (pass it via user_assigned_identity). Ignored for public clusters."
+  type        = string
+  default     = "System"
+
+  validation {
+    condition     = contains(["System", "None"], var.private_dns_zone_id) || can(regex("(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/privateDnsZones/[^/]+$", var.private_dns_zone_id))
+    error_message = "private_dns_zone_id must be \"System\", \"None\" or a private DNS zone resource ID."
+  }
+
+  validation {
+    condition     = contains(["System", "None"], var.private_dns_zone_id) || var.identity_type == "UserAssigned"
+    error_message = "A custom private DNS zone requires identity_type = \"UserAssigned\"."
+  }
+}
+
+variable "private_cluster_public_fqdn_enabled" {
+  description = "For private clusters, also publish a public FQDN (resolving to the private IP). Ignored for public clusters."
+  type        = bool
+  default     = false
+}
+
+variable "api_server_authorized_ip_ranges" {
+  description = "Public CIDR ranges allowed to reach a PUBLIC API server (e.g. office egress, CI runners). Empty = reachable from anywhere (still authenticated). Not supported with private_cluster_enabled."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for r in var.api_server_authorized_ip_ranges : can(cidrhost(r, 0))])
+    error_message = "api_server_authorized_ip_ranges must contain CIDR ranges (use /32 for a single address)."
+  }
+
+  validation {
+    condition     = !var.private_cluster_enabled || length(var.api_server_authorized_ip_ranges) == 0
+    error_message = "api_server_authorized_ip_ranges cannot be used with a private cluster."
+  }
+}
+
+variable "network_contributor_subnet_ids" {
+  description = "Subnets (static key => subnet ID) on which the control plane identity is granted Network Contributor BEFORE the cluster is created (needed with bring-your-own VNet for load balancers, NAT/UDR egress). Keys must be static strings so the map works with subnets created in the same apply. Requires identity_type = UserAssigned."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = length(var.network_contributor_subnet_ids) == 0 || var.identity_type == "UserAssigned"
+    error_message = "network_contributor_subnet_ids requires identity_type = \"UserAssigned\" (a system-assigned principal does not exist before the cluster)."
+  }
+}
+
+# =============================================================================
 # Default (system) node pool
 # =============================================================================
 
 variable "default_node_pool" {
-  description = "System node pool configuration."
+  description = "System node pool configuration. vnet_subnet_id = node subnet (null = AKS-managed VNet); pod_subnet_id = dedicated pod subnet (vnet CNI mode only)."
   type = object({
-    name       = optional(string, "system")
-    vm_size    = optional(string, "Standard_D4ds_v5")
-    node_count = optional(number, 3)
+    name           = optional(string, "system")
+    vm_size        = optional(string, "Standard_D4ds_v5")
+    node_count     = optional(number, 3)
+    vnet_subnet_id = optional(string)
+    pod_subnet_id  = optional(string)
   })
   default  = {}
   nullable = false
+
+  validation {
+    condition     = var.default_node_pool.pod_subnet_id == null || var.network.cni_mode == "vnet"
+    error_message = "default_node_pool.pod_subnet_id is only supported with network.cni_mode = \"vnet\"."
+  }
+
+  validation {
+    condition     = !(var.network.cni_mode == "vnet" && var.network.data_plane == "cilium") || var.default_node_pool.pod_subnet_id != null
+    error_message = "The cilium data plane in vnet CNI mode requires a dedicated pod subnet (default_node_pool.pod_subnet_id)."
+  }
+
+  validation {
+    condition     = !contains(["userDefinedRouting", "userAssignedNATGateway"], var.network.outbound_type) || var.default_node_pool.vnet_subnet_id != null
+    error_message = "outbound_type userDefinedRouting / userAssignedNATGateway requires a bring-your-own node subnet (default_node_pool.vnet_subnet_id)."
+  }
 }

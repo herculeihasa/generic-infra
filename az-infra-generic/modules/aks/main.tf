@@ -109,14 +109,63 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   default_node_pool {
-    name       = var.default_node_pool.name
-    vm_size    = var.default_node_pool.vm_size
-    node_count = var.default_node_pool.node_count
+    name           = var.default_node_pool.name
+    vm_size        = var.default_node_pool.vm_size
+    node_count     = var.default_node_pool.node_count
+    vnet_subnet_id = var.default_node_pool.vnet_subnet_id
+    pod_subnet_id  = var.default_node_pool.pod_subnet_id
   }
 
-  # Azure CNI Overlay. Made configurable in the networking layer of the module.
+  # --- Networking -------------------------------------------------------------------
   network_profile {
     network_plugin      = "azure"
-    network_plugin_mode = "overlay"
+    network_plugin_mode = var.network.cni_mode == "overlay" ? "overlay" : null
+    network_data_plane  = var.network.data_plane
+    network_policy      = local.network_policy
+    pod_cidr            = var.network.cni_mode == "overlay" ? var.network.pod_cidr : null
+    service_cidr        = var.network.service_cidr
+    dns_service_ip      = var.network.dns_service_ip
+    outbound_type       = var.network.outbound_type
+    load_balancer_sku   = "standard"
+
+    dynamic "load_balancer_profile" {
+      for_each = var.network.load_balancer_profile == null ? [] : [var.network.load_balancer_profile]
+      iterator = lb
+
+      content {
+        managed_outbound_ip_count = lb.value.managed_outbound_ip_count
+        outbound_ip_address_ids   = lb.value.outbound_ip_address_ids
+        outbound_ip_prefix_ids    = lb.value.outbound_ip_prefix_ids
+        idle_timeout_in_minutes   = lb.value.idle_timeout_in_minutes
+        outbound_ports_allocated  = lb.value.outbound_ports_allocated
+      }
+    }
+
+    dynamic "nat_gateway_profile" {
+      for_each = var.network.nat_gateway_profile == null ? [] : [var.network.nat_gateway_profile]
+      iterator = nat
+
+      content {
+        managed_outbound_ip_count = nat.value.managed_outbound_ip_count
+        idle_timeout_in_minutes   = nat.value.idle_timeout_in_minutes
+      }
+    }
   }
+
+  # --- API server exposure -----------------------------------------------------------
+  private_cluster_enabled             = var.private_cluster_enabled
+  private_dns_zone_id                 = var.private_cluster_enabled ? var.private_dns_zone_id : null
+  private_cluster_public_fqdn_enabled = var.private_cluster_enabled ? var.private_cluster_public_fqdn_enabled : null
+
+  dynamic "api_server_access_profile" {
+    for_each = length(var.api_server_authorized_ip_ranges) > 0 ? [1] : []
+
+    content {
+      authorized_ip_ranges = var.api_server_authorized_ip_ranges
+    }
+  }
+
+  # With a user-assigned identity, subnet permissions must exist before the
+  # cluster creates its load balancer / egress resources in the subnet.
+  depends_on = [azurerm_role_assignment.network_contributor]
 }

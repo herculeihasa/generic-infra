@@ -11,6 +11,11 @@ locals {
     module     = "aks"
   })
 
+  # --- Networking -----------------------------------------------------------------
+  # "none" is an explicit sentinel because optional() defaults cannot be
+  # overridden with null. null lets AKS run without a network policy engine.
+  network_policy = var.network.policy == "none" ? null : var.network.policy
+
   # --- Control plane identity ---------------------------------------------------
   create_cluster_identity = var.identity_type == "UserAssigned" && var.user_assigned_identity == null
 
