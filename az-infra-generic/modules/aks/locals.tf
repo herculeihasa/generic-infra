@@ -10,4 +10,18 @@ locals {
     managed_by = "terraform"
     module     = "aks"
   })
+
+  # --- Control plane identity ---------------------------------------------------
+  create_cluster_identity = var.identity_type == "UserAssigned" && var.user_assigned_identity == null
+
+  # { id, principal_id } of the user-assigned control plane identity, or null
+  # for SystemAssigned (its principal is only known after the cluster exists).
+  cluster_user_assigned_identity = (
+    var.identity_type != "UserAssigned" ? null :
+    local.create_cluster_identity ? {
+      id           = azurerm_user_assigned_identity.cluster[0].id
+      principal_id = azurerm_user_assigned_identity.cluster[0].principal_id
+    } :
+    var.user_assigned_identity
+  )
 }

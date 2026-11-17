@@ -13,6 +13,7 @@ calling configuration owns those and passes them in by ID.
 | `versions.tf` | Minimum Terraform / `azurerm` versions (no provider block) |
 | `variables.tf` | Module interface: inputs, defaults, validations |
 | `locals.tf` | Derived values |
+| `identity.tf` | Control plane user-assigned identity |
 | `main.tf` | AKS cluster |
 | `outputs.tf` | Outputs |
 | `tests/` | Offline `terraform test` suites using a mocked `azurerm` provider |
