@@ -15,6 +15,7 @@ calling configuration owns those and passes them in by ID.
 | `locals.tf` | Derived values |
 | `identity.tf` | Control plane user-assigned identity |
 | `main.tf` | AKS cluster |
+| `node_pools.tf` | Additional node pools |
 | `outputs.tf` | Outputs |
 | `tests/` | Offline `terraform test` suites using a mocked `azurerm` provider |
 

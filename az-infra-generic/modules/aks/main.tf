@@ -108,12 +108,55 @@ resource "azurerm_kubernetes_cluster" "this" {
     mode = "Manual"
   }
 
+  # --- System node pool --------------------------------------------------------------
   default_node_pool {
-    name           = var.default_node_pool.name
-    vm_size        = var.default_node_pool.vm_size
-    node_count     = var.default_node_pool.node_count
-    vnet_subnet_id = var.default_node_pool.vnet_subnet_id
-    pod_subnet_id  = var.default_node_pool.pod_subnet_id
+    name                        = var.default_node_pool.name
+    temporary_name_for_rotation = local.default_pool_temporary_name
+    vm_size                     = var.default_node_pool.vm_size
+    vnet_subnet_id              = var.default_node_pool.vnet_subnet_id
+    pod_subnet_id               = var.default_node_pool.pod_subnet_id
+    zones                       = var.default_node_pool.zones
+
+    # With autoscaling, node_count is left to the autoscaler (Optional+Computed:
+    # null means "not managed", so there is no drift and no ignore_changes).
+    auto_scaling_enabled = var.default_node_pool.auto_scaling_enabled
+    node_count           = var.default_node_pool.auto_scaling_enabled ? null : var.default_node_pool.node_count
+    min_count            = var.default_node_pool.auto_scaling_enabled ? var.default_node_pool.min_count : null
+    max_count            = var.default_node_pool.auto_scaling_enabled ? var.default_node_pool.max_count : null
+    max_pods             = var.default_node_pool.max_pods
+
+    os_sku                       = var.default_node_pool.os_sku
+    os_disk_type                 = var.default_node_pool.os_disk_type
+    os_disk_size_gb              = var.default_node_pool.os_disk_size_gb
+    only_critical_addons_enabled = var.default_node_pool.only_critical_addons_enabled
+    host_encryption_enabled      = var.default_node_pool.host_encryption_enabled
+    orchestrator_version         = var.default_node_pool.orchestrator_version
+    node_labels                  = var.default_node_pool.node_labels
+    tags                         = merge(local.tags, var.default_node_pool.tags)
+
+    upgrade_settings {
+      max_surge                     = var.default_node_pool.upgrade_settings.max_surge
+      drain_timeout_in_minutes      = var.default_node_pool.upgrade_settings.drain_timeout_in_minutes
+      node_soak_duration_in_minutes = var.default_node_pool.upgrade_settings.node_soak_duration_in_minutes
+    }
+  }
+
+  dynamic "auto_scaler_profile" {
+    for_each = var.auto_scaler_profile == null ? [] : [var.auto_scaler_profile]
+    iterator = autoscaler
+
+    content {
+      balance_similar_node_groups      = autoscaler.value.balance_similar_node_groups
+      expander                         = autoscaler.value.expander
+      max_graceful_termination_sec     = autoscaler.value.max_graceful_termination_sec
+      max_node_provisioning_time       = autoscaler.value.max_node_provisioning_time
+      scan_interval                    = autoscaler.value.scan_interval
+      scale_down_delay_after_add       = autoscaler.value.scale_down_delay_after_add
+      scale_down_unneeded              = autoscaler.value.scale_down_unneeded
+      scale_down_utilization_threshold = autoscaler.value.scale_down_utilization_threshold
+      skip_nodes_with_local_storage    = autoscaler.value.skip_nodes_with_local_storage
+      skip_nodes_with_system_pods      = autoscaler.value.skip_nodes_with_system_pods
+    }
   }
 
   # --- Networking -------------------------------------------------------------------

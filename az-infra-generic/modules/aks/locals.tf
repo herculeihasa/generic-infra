@@ -16,6 +16,30 @@ locals {
   # overridden with null. null lets AKS run without a network policy engine.
   network_policy = var.network.policy == "none" ? null : var.network.policy
 
+  # --- Node pools -----------------------------------------------------------------
+  # Rotation names: "t" + 11 hex characters of a hash of the pool name, so they
+  # are valid (lowercase alphanumeric, <= 12 chars) and unique per pool.
+  default_pool_temporary_name = coalesce(
+    var.default_node_pool.temporary_name_for_rotation,
+    "t${substr(sha1("rotation/${var.default_node_pool.name}"), 0, 11)}",
+  )
+
+  # AKS adds this label and taint to every Spot node; declaring them avoids a
+  # permanent diff on Spot pools.
+  spot_label = { "kubernetes.azure.com/scalesetpriority" = "spot" }
+  spot_taint = "kubernetes.azure.com/scalesetpriority=spot:NoSchedule"
+
+  node_pools = {
+    for name, pool in var.node_pools : name => merge(pool, {
+      temporary_name_for_rotation = "t${substr(sha1("rotation/${name}"), 0, 11)}"
+      is_spot                     = pool.priority == "Spot"
+      vnet_subnet_id              = pool.vnet_subnet_id != null ? pool.vnet_subnet_id : var.default_node_pool.vnet_subnet_id
+      pod_subnet_id               = pool.pod_subnet_id != null ? pool.pod_subnet_id : var.default_node_pool.pod_subnet_id
+      node_labels                 = pool.priority == "Spot" ? merge(pool.node_labels, local.spot_label) : pool.node_labels
+      node_taints                 = pool.priority == "Spot" ? distinct(concat(pool.node_taints, [local.spot_taint])) : pool.node_taints
+    })
+  }
+
   # --- Control plane identity ---------------------------------------------------
   create_cluster_identity = var.identity_type == "UserAssigned" && var.user_assigned_identity == null
 

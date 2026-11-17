@@ -436,16 +436,98 @@ variable "network_contributor_subnet_ids" {
 # =============================================================================
 
 variable "default_node_pool" {
-  description = "System node pool configuration. vnet_subnet_id = node subnet (null = AKS-managed VNet); pod_subnet_id = dedicated pod subnet (vnet CNI mode only)."
+  description = <<-EOT
+    System node pool (Linux). Main settings:
+    - vnet_subnet_id: node subnet (null = AKS-managed VNet); pod_subnet_id: dedicated pod subnet (vnet CNI mode only).
+    - zones: availability zones (set [] in regions without zones).
+    - auto_scaling_enabled with min_count/max_count, or a fixed node_count. With autoscaling the pool
+      starts at min_count and Terraform never fights the cluster autoscaler.
+    - only_critical_addons_enabled: taint the pool CriticalAddonsOnly=true:NoSchedule so it only runs
+      system pods (recommended; then declare at least one User pool in node_pools).
+    - os_disk_type: Managed or Ephemeral (Ephemeral needs a VM size whose cache/temp disk fits os_disk_size_gb).
+    - host_encryption_enabled: encryption at host (requires the EncryptionAtHost subscription feature).
+    - temporary_name_for_rotation: name used to rotate the pool when an immutable setting changes
+      (defaults to a generated name), so vm_size/zones/disk changes do not recreate the cluster.
+  EOT
   type = object({
-    name           = optional(string, "system")
-    vm_size        = optional(string, "Standard_D4ds_v5")
-    node_count     = optional(number, 3)
-    vnet_subnet_id = optional(string)
-    pod_subnet_id  = optional(string)
+    name                         = optional(string, "system")
+    vm_size                      = optional(string, "Standard_D4ds_v5")
+    vnet_subnet_id               = optional(string)
+    pod_subnet_id                = optional(string)
+    zones                        = optional(list(string), ["1", "2", "3"])
+    auto_scaling_enabled         = optional(bool, true)
+    node_count                   = optional(number, 3)
+    min_count                    = optional(number, 3)
+    max_count                    = optional(number, 5)
+    max_pods                     = optional(number)
+    os_sku                       = optional(string, "AzureLinux")
+    os_disk_type                 = optional(string, "Managed")
+    os_disk_size_gb              = optional(number, 128)
+    only_critical_addons_enabled = optional(bool, true)
+    host_encryption_enabled      = optional(bool, false)
+    orchestrator_version         = optional(string)
+    node_labels                  = optional(map(string), {})
+    temporary_name_for_rotation  = optional(string)
+    upgrade_settings = optional(object({
+      max_surge                     = optional(string, "10%")
+      drain_timeout_in_minutes      = optional(number)
+      node_soak_duration_in_minutes = optional(number)
+    }), {})
+    tags = optional(map(string), {})
   })
   default  = {}
   nullable = false
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9]{0,11}$", var.default_node_pool.name))
+    error_message = "default_node_pool.name must be 1-12 lowercase letters/digits starting with a letter."
+  }
+
+  validation {
+    condition = var.default_node_pool.temporary_name_for_rotation == null ? true : (
+      can(regex("^[a-z][a-z0-9]{0,11}$", var.default_node_pool.temporary_name_for_rotation)) &&
+      var.default_node_pool.temporary_name_for_rotation != var.default_node_pool.name
+    )
+    error_message = "default_node_pool.temporary_name_for_rotation must be 1-12 lowercase letters/digits starting with a letter, different from the pool name."
+  }
+
+  validation {
+    condition = (
+      var.default_node_pool.auto_scaling_enabled ?
+      var.default_node_pool.min_count >= 1 && var.default_node_pool.min_count <= var.default_node_pool.max_count && var.default_node_pool.max_count <= 1000 :
+      var.default_node_pool.node_count >= 1 && var.default_node_pool.node_count <= 1000
+    )
+    error_message = "System pool sizing: with autoscaling 1 <= min_count <= max_count <= 1000, otherwise 1 <= node_count <= 1000."
+  }
+
+  validation {
+    condition     = alltrue([for z in var.default_node_pool.zones : contains(["1", "2", "3"], z)])
+    error_message = "default_node_pool.zones must be a subset of [\"1\", \"2\", \"3\"]."
+  }
+
+  validation {
+    condition = (
+      contains(["Managed", "Ephemeral"], var.default_node_pool.os_disk_type) &&
+      contains(["AzureLinux", "AzureLinux3", "Ubuntu", "Ubuntu2204", "Ubuntu2404"], var.default_node_pool.os_sku) &&
+      var.default_node_pool.os_disk_size_gb >= 30 && var.default_node_pool.os_disk_size_gb <= 2048
+    )
+    error_message = "default_node_pool: os_disk_type must be Managed or Ephemeral, os_sku a Linux SKU (AzureLinux, AzureLinux3, Ubuntu, Ubuntu2204, Ubuntu2404), os_disk_size_gb between 30 and 2048."
+  }
+
+  validation {
+    condition     = can(regex("^[0-9]+%?$", var.default_node_pool.upgrade_settings.max_surge))
+    error_message = "default_node_pool.upgrade_settings.max_surge must be a node count (e.g. \"1\") or a percentage (e.g. \"33%\")."
+  }
+
+  validation {
+    condition = (
+      var.default_node_pool.orchestrator_version == null ? true :
+      contains(["stable", "rapid"], coalesce(var.automatic_upgrade_channel, "none")) ? false :
+      var.automatic_upgrade_channel == "patch" ? can(regex("^[0-9]+\\.[0-9]+$", var.default_node_pool.orchestrator_version)) :
+      can(regex("^[0-9]+\\.[0-9]+(\\.[0-9]+)?$", var.default_node_pool.orchestrator_version))
+    )
+    error_message = "default_node_pool.orchestrator_version follows the kubernetes_version rules: MAJOR.MINOR with the patch channel, null with stable/rapid."
+  }
 
   validation {
     condition     = var.default_node_pool.pod_subnet_id == null || var.network.cni_mode == "vnet"
@@ -460,5 +542,151 @@ variable "default_node_pool" {
   validation {
     condition     = !contains(["userDefinedRouting", "userAssignedNATGateway"], var.network.outbound_type) || var.default_node_pool.vnet_subnet_id != null
     error_message = "outbound_type userDefinedRouting / userAssignedNATGateway requires a bring-your-own node subnet (default_node_pool.vnet_subnet_id)."
+  }
+}
+
+# =============================================================================
+# Additional node pools
+# =============================================================================
+
+variable "node_pools" {
+  description = <<-EOT
+    Additional Linux node pools, keyed by pool name (1-12 lowercase letters/digits).
+    Each pool inherits the system pool's vnet_subnet_id/pod_subnet_id unless set.
+    - mode: User (workloads, default) or System.
+    - auto_scaling_enabled with min_count (User pools may scale to 0) / max_count, or a fixed node_count.
+    - node_labels / node_taints ("key=value:NoSchedule|PreferNoSchedule|NoExecute").
+    - priority = "Spot" enables Spot VMs (eviction_policy, spot_max_price = -1 for on-demand cap);
+      the AKS spot label and taint are added automatically.
+  EOT
+  type = map(object({
+    vm_size                 = string
+    mode                    = optional(string, "User")
+    os_sku                  = optional(string, "AzureLinux")
+    vnet_subnet_id          = optional(string)
+    pod_subnet_id           = optional(string)
+    zones                   = optional(list(string), ["1", "2", "3"])
+    auto_scaling_enabled    = optional(bool, true)
+    node_count              = optional(number, 1)
+    min_count               = optional(number, 1)
+    max_count               = optional(number, 3)
+    max_pods                = optional(number)
+    os_disk_type            = optional(string, "Managed")
+    os_disk_size_gb         = optional(number, 128)
+    node_labels             = optional(map(string), {})
+    node_taints             = optional(list(string), [])
+    priority                = optional(string, "Regular")
+    eviction_policy         = optional(string, "Delete")
+    spot_max_price          = optional(number, -1)
+    host_encryption_enabled = optional(bool, false)
+    orchestrator_version    = optional(string)
+    upgrade_settings = optional(object({
+      max_surge                     = optional(string, "10%")
+      drain_timeout_in_minutes      = optional(number)
+      node_soak_duration_in_minutes = optional(number)
+    }), {})
+    tags = optional(map(string), {})
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition = alltrue([
+      for name, pool in var.node_pools :
+      can(regex("^[a-z][a-z0-9]{0,11}$", name)) && name != var.default_node_pool.name
+    ])
+    error_message = "node_pools keys must be 1-12 lowercase letters/digits starting with a letter and differ from default_node_pool.name."
+  }
+
+  validation {
+    condition = alltrue([
+      for pool in values(var.node_pools) :
+      contains(["User", "System"], pool.mode) && contains(["Regular", "Spot"], pool.priority) &&
+      contains(["Managed", "Ephemeral"], pool.os_disk_type) &&
+      contains(["AzureLinux", "AzureLinux3", "Ubuntu", "Ubuntu2204", "Ubuntu2404"], pool.os_sku)
+    ])
+    error_message = "node_pools: mode must be User or System, priority Regular or Spot, os_disk_type Managed or Ephemeral, os_sku a Linux SKU."
+  }
+
+  validation {
+    condition = alltrue([
+      for pool in values(var.node_pools) : (
+        pool.auto_scaling_enabled ?
+        pool.min_count >= (pool.mode == "System" ? 1 : 0) && pool.min_count <= pool.max_count && pool.max_count <= 1000 && pool.max_count >= 1 :
+        pool.node_count >= (pool.mode == "System" ? 1 : 0) && pool.node_count <= 1000
+      )
+    ])
+    error_message = "node_pools sizing: with autoscaling min_count <= max_count <= 1000 (min_count >= 1 for System pools, >= 0 for User pools); otherwise node_count between 0 (User) / 1 (System) and 1000."
+  }
+
+  validation {
+    condition     = alltrue([for pool in values(var.node_pools) : alltrue([for z in pool.zones : contains(["1", "2", "3"], z)])])
+    error_message = "node_pools zones must be subsets of [\"1\", \"2\", \"3\"]."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for pool in values(var.node_pools) : [
+        for taint in pool.node_taints : can(regex("^[A-Za-z0-9./_-]+(=[A-Za-z0-9._-]*)?:(NoSchedule|PreferNoSchedule|NoExecute)$", taint))
+      ]
+    ]))
+    error_message = "node_pools taints must look like key=value:NoSchedule (effects: NoSchedule, PreferNoSchedule, NoExecute)."
+  }
+
+  validation {
+    condition = alltrue([
+      for pool in values(var.node_pools) :
+      pool.priority == "Regular" ? true : (pool.mode == "User" && contains(["Delete", "Deallocate"], pool.eviction_policy) && (pool.spot_max_price == -1 || pool.spot_max_price > 0))
+    ])
+    error_message = "Spot node pools must be User pools with eviction_policy Delete or Deallocate and spot_max_price -1 or > 0."
+  }
+
+  validation {
+    condition     = alltrue([for pool in values(var.node_pools) : pool.pod_subnet_id == null || var.network.cni_mode == "vnet"])
+    error_message = "node_pools pod_subnet_id is only supported with network.cni_mode = \"vnet\"."
+  }
+
+  validation {
+    condition     = alltrue([for pool in values(var.node_pools) : var.default_node_pool.vnet_subnet_id != null || pool.vnet_subnet_id == null])
+    error_message = "node_pools cannot use their own vnet_subnet_id when the system pool uses the AKS-managed VNet (all pools must share one VNet)."
+  }
+
+  validation {
+    condition     = alltrue([for pool in values(var.node_pools) : can(regex("^[0-9]+%?$", pool.upgrade_settings.max_surge))])
+    error_message = "node_pools upgrade_settings.max_surge must be a node count (e.g. \"1\") or a percentage (e.g. \"33%\")."
+  }
+
+  validation {
+    condition = alltrue([
+      for pool in values(var.node_pools) : (
+        pool.orchestrator_version == null ? true :
+        contains(["stable", "rapid"], coalesce(var.automatic_upgrade_channel, "none")) ? false :
+        var.automatic_upgrade_channel == "patch" ? can(regex("^[0-9]+\\.[0-9]+$", pool.orchestrator_version)) :
+        can(regex("^[0-9]+\\.[0-9]+(\\.[0-9]+)?$", pool.orchestrator_version))
+      )
+    ])
+    error_message = "node_pools orchestrator_version follows the kubernetes_version rules: MAJOR.MINOR with the patch channel, null with stable/rapid."
+  }
+}
+
+variable "auto_scaler_profile" {
+  description = "Optional cluster autoscaler tuning shared by all autoscaled pools. Null keeps the AKS defaults. Durations use Go syntax (e.g. \"10m\")."
+  type = object({
+    balance_similar_node_groups      = optional(bool)
+    expander                         = optional(string)
+    max_graceful_termination_sec     = optional(number)
+    max_node_provisioning_time       = optional(string)
+    scan_interval                    = optional(string)
+    scale_down_delay_after_add       = optional(string)
+    scale_down_unneeded              = optional(string)
+    scale_down_utilization_threshold = optional(number)
+    skip_nodes_with_local_storage    = optional(bool)
+    skip_nodes_with_system_pods      = optional(bool)
+  })
+  default = null
+
+  validation {
+    condition     = var.auto_scaler_profile == null ? true : contains(["least-waste", "priority", "most-pods", "random", "none"], coalesce(var.auto_scaler_profile.expander, "none"))
+    error_message = "auto_scaler_profile.expander must be least-waste, priority, most-pods or random."
   }
 }
