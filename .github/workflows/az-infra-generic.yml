@@ -1,0 +1,89 @@
+# Pipeline of the az-infra-generic project (Azure, AKS module).
+# Stages 1-3 run without Azure access; Azure stages run only once
+# vars.AZURE_DEPLOYMENT_ENABLED is "true" (see docs/ci-cd.md).
+name: az-infra-generic
+
+on:
+  pull_request:
+    paths:
+      - "az-infra-generic/**"
+      - "ci/**"
+      - ".github/workflows/_terraform-*.yml"
+      - ".github/workflows/az-infra-generic.yml"
+      - ".gitleaks.toml"
+      - ".checkov.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "az-infra-generic/**"
+      - "ci/**"
+      - ".github/workflows/_terraform-*.yml"
+      - ".github/workflows/az-infra-generic.yml"
+      - ".gitleaks.toml"
+      - ".checkov.yaml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+      allow-destroy:
+        description: Authorize applying a plan that deletes or replaces resources
+        type: boolean
+        default: false
+  schedule:
+    # Weekly: full validation, security re-scan and drift detection plan.
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: az-infra-generic-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    name: quality
+    uses: ./.github/workflows/_terraform-quality.yml
+    with:
+      project: az-infra-generic
+      caller-workflow: .github/workflows/az-infra-generic.yml
+
+  azure-config:
+    name: "2 · Azure provider & backend checks"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Backend isolation, Entra ID auth, no credentials in code, lock coverage
+        run: python3 ci/scripts/ci.py azure-config az-infra-generic
+
+  azure-readiness:
+    name: "4 · Azure deployment readiness"
+    needs: [quality, azure-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Are Azure stages enabled for this repository?
+        id: check
+        env:
+          AZURE_DEPLOYMENT_ENABLED: ${{ vars.AZURE_DEPLOYMENT_ENABLED }}
+        run: |
+          if [[ "${AZURE_DEPLOYMENT_ENABLED:-}" == "true" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Azure plan/apply stages enabled." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Azure stages skipped::Set the repository variable AZURE_DEPLOYMENT_ENABLED=true once the Azure OIDC identity and the state backend exist (docs/ci-cd.md)."
+            {
+              echo "### Azure stages not run"
+              echo "Static validation passed. Plan/apply are **not** executed: Azure access is not configured"
+              echo "(repository variable \`AZURE_DEPLOYMENT_ENABLED\` is not \`true\`). No deployment happened."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

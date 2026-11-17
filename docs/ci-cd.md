@@ -158,7 +158,32 @@ Defined with the plan and apply stages implementation.
 | Azure plan/apply (`az-infra-generic`) | GitHub-hosted, OIDC to Azure | Azure APIs are reachable from the internet |
 | MicroK8s plan/apply/integration (`tp-local`) | **Self-hosted runner inside the WSL distribution** (`[self-hosted, linux, wsl, microk8s]`) | A hosted runner cannot reach a cluster on a laptop; the local state also lives there |
 
-## 8. Status
+## 8. az-infra-generic pipeline
+
+Workflow: [`.github/workflows/az-infra-generic.yml`](../.github/workflows/az-infra-generic.yml).
+
+| Trigger | What runs |
+|---|---|
+| Pull request touching the project or shared CI | Stages 1-3 on the affected roots + Azure static checks |
+| Push to `main` | Stages 1-3 on every root + Azure static checks; Azure plan/apply when enabled |
+| `workflow_dispatch` (`environment`, `allow-destroy`) | Same as push, for the chosen environment |
+| Weekly schedule | Full validation, security re-scan, drift-detection plan when enabled |
+
+**Azure static checks** (`ci.py azure-config`, no credentials needed, every run):
+no `client_secret`/`access_key`/`sas_token`/hardcoded subscription or tenant
+ID in any `.tf`; each deployable root uses the `azurerm` backend with
+`use_azuread_auth = true`, the `tfstate-<environment>` container, a state
+key and no `storage_account_name` in `backend.tf`; `backend.hcl` (when
+committed) contains only `storage_account_name`; `azurerm` is locked for the
+four platforms; the bootstrap creates the environment's state container.
+
+**Azure stages are disabled until configured.** The `azure-readiness` job
+only lets plan/apply run when the repository variable
+`AZURE_DEPLOYMENT_ENABLED` is `true`; otherwise it reports, in the run
+summary, that no Azure stage was executed. Nothing is ever reported as
+deployed without an actual apply.
+
+## 9. Status
 
 The pipeline definitions are implemented incrementally; see the following
 sections of this document as they are added.

@@ -6,6 +6,8 @@ self-hosted WSL runner and developer machines.
 
     python3 ci/scripts/ci.py manifest <project> <key>
     python3 ci/scripts/ci.py changes <project> [--base SHA] [--head SHA] [--all]
+    python3 ci/scripts/ci.py azure-config <project>
+    python3 ci/scripts/ci.py gate            (reads $NEEDS_JSON)
 
 `changes` prints a JSON object and, when $GITHUB_OUTPUT is set, also writes
 `roots` (JSON list) and `run` (true/false) step outputs.
@@ -16,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -112,6 +115,90 @@ def cmd_changes(args: argparse.Namespace) -> int:
     return 0
 
 
+GUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+FORBIDDEN_TF_PATTERNS = {
+    "client_secret": r"^\s*client_secret\s*=",
+    "client_certificate_password": r"^\s*client_certificate_password\s*=",
+    "access_key": r"^\s*access_key\s*=",
+    "sas_token": r"^\s*sas_token\s*=",
+    "hardcoded subscription_id": rf'^\s*subscription_id\s*=\s*"{GUID}"',
+    "hardcoded tenant_id": rf'^\s*tenant_id\s*=\s*"{GUID}"',
+}
+
+
+def strip_hcl_comments(text: str) -> str:
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return "\n".join(re.sub(r"(#|//).*$", "", line) for line in text.splitlines())
+
+
+def azure_config_problems(project: str, repo_root: Path = REPO_ROOT) -> list[str]:
+    """Static Azure provider/backend checks (no credentials needed)."""
+    manifest = load_manifest(project)
+    project_dir = repo_root / project
+    problems: list[str] = []
+
+    for tf in sorted(project_dir.rglob("*.tf")):
+        if ".terraform" in tf.parts:
+            continue
+        text = strip_hcl_comments(tf.read_text(encoding="utf-8"))
+        for label, pattern in FORBIDDEN_TF_PATTERNS.items():
+            if re.search(pattern, text, re.M):
+                problems.append(f"{tf.relative_to(repo_root).as_posix()}: {label} must not be set in code")
+
+    bootstrap_vars = strip_hcl_comments((project_dir / "bootstrap" / "variables.tf").read_text(encoding="utf-8"))
+    env_block = re.search(r'variable "environments"\s*\{.*?default\s*=\s*\[(.*?)\]', bootstrap_vars, re.S)
+    bootstrap_envs = set(re.findall(r'"([^"]+)"', env_block.group(1))) if env_block else set()
+
+    for deployment in manifest.get("deployments", []):
+        if deployment.get("platform") != "azure":
+            continue
+        root, env = deployment["root"], deployment["environment"]
+        rel = f"{project}/{root}"
+        backend_tf = project_dir / root / "backend.tf"
+        if not backend_tf.is_file():
+            problems.append(f"{rel}: backend.tf missing")
+            continue
+        backend = strip_hcl_comments(backend_tf.read_text(encoding="utf-8"))
+        if not re.search(r'backend\s+"azurerm"', backend):
+            problems.append(f"{rel}/backend.tf: azurerm backend required")
+        if not re.search(r"use_azuread_auth\s*=\s*true", backend):
+            problems.append(f"{rel}/backend.tf: use_azuread_auth = true required (Entra ID, no keys)")
+        if not re.search(rf'container_name\s*=\s*"tfstate-{re.escape(env)}"', backend):
+            problems.append(f'{rel}/backend.tf: container_name must be "tfstate-{env}" (per-environment isolation)')
+        if not re.search(r'\bkey\s*=\s*"[^"]+\.tfstate"', backend):
+            problems.append(f"{rel}/backend.tf: a state key ending in .tfstate is required")
+        if re.search(r"storage_account_name\s*=", backend):
+            problems.append(f"{rel}/backend.tf: storage_account_name belongs to backend.hcl (partial configuration)")
+
+        backend_hcl = project_dir / root / "backend.hcl"
+        if backend_hcl.is_file():
+            keys = set(re.findall(r"^\s*([a-z_]+)\s*=", strip_hcl_comments(backend_hcl.read_text(encoding="utf-8")), re.M))
+            if keys - {"storage_account_name"}:
+                problems.append(f"{rel}/backend.hcl: only storage_account_name is allowed (found {sorted(keys)})")
+
+        lock = project_dir / root / ".terraform.lock.hcl"
+        lock_text = lock.read_text(encoding="utf-8") if lock.is_file() else ""
+        provider = re.search(r'provider "registry\.terraform\.io/hashicorp/azurerm" \{(.*?)\n\}', lock_text, re.S)
+        if not provider:
+            problems.append(f"{rel}/.terraform.lock.hcl: hashicorp/azurerm must be locked")
+        elif len(re.findall(r'"h1:', provider.group(1))) < 4:
+            problems.append(f"{rel}/.terraform.lock.hcl: azurerm needs h1 hashes for windows/linux amd64 and darwin amd64/arm64")
+
+        if env not in bootstrap_envs:
+            problems.append(f"{project}/bootstrap: environments default does not create the tfstate-{env} container")
+    return problems
+
+
+def cmd_azure_config(args: argparse.Namespace) -> int:
+    problems = azure_config_problems(args.project)
+    for p in problems:
+        print(f"::error::{p}" if os.environ.get("GITHUB_ACTIONS") else f"ERROR: {p}")
+    if problems:
+        return 1
+    print(f"azure configuration checks passed for {args.project}")
+    return 0
+
+
 def evaluate_gate(needs: dict) -> tuple[bool, list[str]]:
     """Aggregate GitHub `needs` results: only success/skipped pass.
 
@@ -155,6 +242,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--all", action="store_true", help="select every root")
     p.add_argument("--workflow-file", help="project caller workflow (its change re-validates everything)")
     p.set_defaults(func=cmd_changes)
+
+    p = sub.add_parser("azure-config", help="static Azure provider and backend checks (no credentials)")
+    p.add_argument("project")
+    p.set_defaults(func=cmd_azure_config)
 
     p = sub.add_parser("gate", help="fail unless every needed job succeeded or was skipped")
     p.add_argument("--env-var", default="NEEDS_JSON", help="environment variable holding toJSON(needs)")
