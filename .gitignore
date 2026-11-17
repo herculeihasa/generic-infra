@@ -1,0 +1,16 @@
+# Repository-level ignores (each project has its own .gitignore for
+# Terraform artefacts).
+
+# Python bytecode of the CI helpers.
+__pycache__/
+*.py[cod]
+
+# Local CI tool cache and scanner reports produced by ci/scripts.
+.ci-reports/
+.venv*/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
