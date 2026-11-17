@@ -1,0 +1,15 @@
+{
+  "project": "az-infra-generic",
+  "description": "Generic Azure infrastructure (AKS module, Azure Blob remote state).",
+  "roots": ["bootstrap", "environments/dev", "modules/aks"],
+  "compat_min_terraform": ["modules/aks"],
+  "script_tests": [],
+  "deployments": [
+    {
+      "root": "environments/dev",
+      "environment": "dev",
+      "platform": "azure",
+      "runner": "hosted"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "project": "tp-local",
+  "description": "Local MicroK8s cluster in WSL2 (stage 1 bootstrap, stage 2 Kubernetes/Helm).",
+  "roots": ["bootstrap", "environments/dev", "modules/microk8s", "modules/k8s-namespace"],
+  "compat_min_terraform": ["modules/microk8s", "modules/k8s-namespace"],
+  "script_tests": ["modules/microk8s/scripts/tests/run.sh"],
+  "deployments": [
+    {
+      "root": "bootstrap",
+      "environment": "local",
+      "platform": "wsl",
+      "runner": "self-hosted"
+    },
+    {
+      "root": "environments/dev",
+      "environment": "local",
+      "platform": "wsl",
+      "runner": "self-hosted"
+    }
+  ]
+}
