@@ -1,0 +1,14 @@
+# Example %UserProfile%\.wslconfig for tp-local (Windows host, applies to all
+# WSL2 distributions). Copy the relevant lines, then run `wsl --shutdown`.
+#
+# MicroK8s + add-ons + a few workloads: 6-8 GB of RAM and 4 CPUs are
+# comfortable; the defaults (50% of RAM, all CPUs) also work on most hosts.
+
+[wsl2]
+memory=8GB
+processors=4
+swap=4GB
+
+# Keep the default NAT networking: ports listening in WSL (MicroK8s API on
+# 16443, ingress on 80/443) are reachable from Windows through localhost.
+# localhostForwarding=true
