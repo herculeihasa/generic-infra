@@ -295,5 +295,19 @@ releases and podinfo through the ingress.
 
 ## 12. CI/CD
 
-Validation, security scanning and the deployment gates are described in the
-repository pipeline documentation ([`../docs/ci-cd.md`](../docs/ci-cd.md)).
+Workflow `.github/workflows/tp-local.yml`, documented in
+[`../docs/ci-cd.md`](../docs/ci-cd.md) (§9 for the WSL runner):
+
+* **GitHub-hosted runners** (every PR/push): formatting, init with the
+  read-only lock file, validate, `terraform test` (all 4 configurations), the
+  minimum Terraform version job on the modules, the script behaviour suite,
+  TFLint, ShellCheck, Gitleaks, Trivy, Checkov. They never touch a cluster.
+* **Self-hosted runner inside WSL** (manual *Run workflow* from `main` with
+  `local-deploy: true`, repository variable `TP_LOCAL_RUNNER_ENABLED=true`):
+  preflight → plan `bootstrap` → approval (`tp-local` environment) → apply
+  the saved plan → plan `environments/dev` → approval → apply →
+  `scripts/verify-cluster.sh` integration tests.
+* Steps needing root (first install, channel change) cannot run unattended
+  and stay interactive (`sudo -v` then `terraform apply` in WSL).
+
+Run the same gates locally: `ci/scripts/run-local.sh tp-local` (repository root).

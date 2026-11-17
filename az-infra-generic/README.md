@@ -48,6 +48,8 @@ Design principles:
 az-infra-generic/
 ├── .terraform-version        # exact Terraform CLI version (tfenv / tenv / CI)
 ├── .tflint.hcl               # TFLint configuration (terraform + azurerm rulesets)
+├── .checkov.yaml             # Checkov policy configuration (+ .checkov-prod.yaml for production plans)
+├── .trivyignore.yaml         # Trivy accepted findings (justified, expiring)
 ├── .gitignore / .gitattributes
 ├── bootstrap/                # remote state storage, LOCAL state
 │   ├── versions.tf           # Terraform/provider constraints + provider block
@@ -222,6 +224,11 @@ env:
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 ```
+
+The repository pipeline (`.github/workflows/_terraform-plan.yml` and
+`_terraform-apply.yml`) does exactly this, with one identity per GitHub
+environment: a read-only plan identity and an approval-gated deployment
+identity. Setup and roles: [`docs/ci-cd.md`](../docs/ci-cd.md) §6 and §10.
 
 Azure DevOps works the same way with an OIDC service connection
 (`ARM_USE_OIDC=true`, `ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID`).
@@ -693,14 +700,19 @@ Each suite asserts on planned values and has negative tests (`expect_failures`)
 for every validation rule. A deliberately wrong assertion fails, and an
 assertion on a value unknown at plan time errors instead of passing.
 
-### Static analysis prepared but not executed
+### Static analysis and security scanning (CI pipeline)
+
+TFLint (`.tflint.hcl`), Gitleaks, Trivy (`.trivyignore.yaml`) and Checkov
+(`.checkov.yaml`, stricter `.checkov-prod.yaml` for production plans) run in
+the `az-infra-generic` GitHub Actions workflow, together with Azure static
+checks of the provider/backend configuration. See
+[`docs/ci-cd.md`](../docs/ci-cd.md). They were not executed on the authoring
+machine (tools unavailable there): their first CI run establishes the
+findings baseline. Locally, on Linux/WSL:
 
 ```bash
-tflint --init --config "$(pwd)/.tflint.hcl"
-tflint --recursive --config "$(pwd)/.tflint.hcl"
+ci/scripts/install-tools.sh && ci/scripts/run-local.sh az-infra-generic   # from the repository root
 ```
-
-Optional security scanners: `trivy config .` or `checkov -d .`.
 
 ### Azure-dependent validation (pending)
 
@@ -711,7 +723,9 @@ cd environments/dev && terraform plan -out=dev.tfplan                   # needs 
 cd environments/dev && terraform apply dev.tfplan                       # real deployment
 ```
 
-Module minimum version check (declared `>= 1.9.0`, exercised with 1.17.2 only):
+Module minimum version check (declared `>= 1.9.0`): the pipeline's
+"minimum Terraform version" job validates and tests `modules/aks` with
+Terraform 1.9.8; locally:
 `tfenv use 1.9.8 && cd modules/aks && terraform init -backend=false && terraform validate && terraform test`.
 
 ## 13. Troubleshooting
@@ -753,8 +767,9 @@ Module minimum version check (declared `>= 1.9.0`, exercised with 1.17.2 only):
 | AKS module | ✅ validated + 70 offline tests | real plan/apply; Azure-side checks (quotas, SKU/zone availability, policy compliance, RBAC propagation) |
 | dev environment | ✅ validated + 2 offline tests | `TODO(azure-access)` values, plan/apply, `kubectl` smoke test |
 | rec / ppr / prod | directories only | created from dev ([§2](#adding-an-environment-rec-ppr-prod)) |
-| TFLint, security scanners | config prepared | first run (tools were not available locally) |
-| Module on Terraform 1.9.x | minimum declared | run validate/test with 1.9.x |
+| TFLint, Gitleaks, Trivy, Checkov | run by the CI pipeline | first CI run (findings baseline: fix or accept explicitly) |
+| Module on Terraform 1.9.x | CI minimum-version job | first CI run |
+| CI/CD plan/apply | implemented ([`docs/ci-cd.md`](../docs/ci-cd.md)) | Azure identities + GitHub environments, then `AZURE_DEPLOYMENT_ENABLED=true` |
 
 ### Steps to complete the initial deployment when Azure access is granted
 

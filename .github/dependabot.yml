@@ -1,0 +1,25 @@
+# Dependency updates as reviewable pull requests (each one runs every gate).
+# - GitHub Actions: keeps the commit-SHA pins (and their version comments) current.
+# - Terraform providers: updates constraints/lock files of the root configurations.
+# CI tool versions (ci/tool-versions.env) are updated by hand, version and
+# SHA-256 together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories:
+      - /az-infra-generic/bootstrap
+      - /az-infra-generic/environments/dev
+      - /tp-local/environments/dev
+    schedule:
+      interval: weekly
+    groups:
+      providers:
+        patterns: ["*"]

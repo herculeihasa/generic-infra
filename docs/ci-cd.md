@@ -18,7 +18,7 @@ is used because it gives, without extra infrastructure:
 | Manual approval, per-environment permissions, production rules | **Environments**: required reviewers, prevent self-review, deployment branch rules, wait timers, environment-scoped secrets/variables |
 | Secretless Azure authentication | OpenID Connect federation (`id-token: write`), consumed by Terraform through `ARM_USE_OIDC` |
 | Local MicroK8s cluster | **Self-hosted runner** installed in the WSL distribution, targeted by labels |
-| Plan reuse between approval and apply | Workflow artifacts (plan file + JSON + summary) |
+| Plan reuse between approval and apply | Workflow artifacts (saved plan + readable plan + summary + metadata) |
 
 Azure DevOps Pipelines would offer equivalent features (stages, environments
 with checks, service connections); it would only be preferable if the
@@ -38,7 +38,10 @@ ci/
 ├── projects/<project>.json   per-project manifest (roots, compat checks, script tests, deployments)
 ├── scripts/                  logic shared by CI and local runs (bash + Python stdlib)
 ├── policies/                 policy-as-code (custom Checkov policies)
-└── tests/                    unit tests of the Python helpers
+└── tests/                    unit tests (helpers, plan report, apply guard) + workflow/security policy tests
+.github/dependabot.yml        weekly PRs for action SHA pins and Terraform providers
+.gitleaks.toml  .checkov.yaml  .shellcheckrc        repository-level scanner configuration
+<project>/.tflint.hcl  .checkov.yaml  .checkov-<env>.yaml  .trivyignore.yaml   project-level configuration
 docs/ci-cd.md                 this document
 ```
 
@@ -57,7 +60,7 @@ docs/ci-cd.md                 this document
 |---|---|---|---|---|
 | 1 Source & configuration | Change detection | `ci.py changes` (git diff) | — (selects the Terraform roots to check) | — |
 | | Formatting | `terraform fmt -check -recursive` | any unformatted file | yes |
-| | Initialisation + lock-file consistency | `terraform init -backend=false -lockfile=readonly` | lock file missing a provider/platform or inconsistent with constraints | yes |
+| | Initialisation + lock-file consistency | `terraform init -backend=false -lockfile=readonly` | committed lock file missing a provider or inconsistent with the constraints (4-platform `azurerm` coverage is checked by the Azure static checks) | yes |
 | | Validation | `terraform validate` | any error | yes |
 | | Unit tests | `terraform test` (mocked providers), script suites | any failed run | yes |
 | | Version compatibility | validate + test with the oldest supported Terraform (`TERRAFORM_MIN_VERSION`) on modules | any failure | yes |
@@ -271,7 +274,83 @@ Then set the repository variable `TP_LOCAL_RUNNER_ENABLED=true`.
 * The machine must be on (and WSL running) for the job to start; queued jobs
   expire after 24 hours.
 
-## 10. Status
+## 10. Required configuration (GitHub)
 
-The pipeline definitions are implemented incrementally; see the following
-sections of this document as they are added.
+No secret is required by the pipelines. Identifiers are **variables**.
+
+| Name | Kind | Scope | Purpose |
+|---|---|---|---|
+| `AZURE_DEPLOYMENT_ENABLED` | variable (`true`) | repository | Enables Azure plan/apply jobs |
+| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | variables | environments `azure-<env>-plan`, `azure-<env>` | OIDC identity of the job (different per environment) |
+| `TF_STATE_STORAGE_ACCOUNT` | variable | same environments | State account, if `environments/<env>/backend.hcl` is not committed |
+| `TP_LOCAL_RUNNER_ENABLED` | variable (`true`) | repository | A self-hosted WSL runner is registered |
+| Environments | `azure-dev-plan`, `azure-dev`, `azure-prod-plan`, `azure-prod`, `tp-local-plan`, `tp-local` | repository settings | Approvals and deployment branch rules (§6) |
+| `GITHUB_TOKEN` | automatic | — | Read-only (`contents: read`); also used by TFLint to download plugins |
+
+Workflow permissions are `contents: read` by default; only plan/apply jobs
+add `id-token: write` (OIDC).
+
+## 11. Executing the pipelines
+
+| Goal | How |
+|---|---|
+| Validate a change | Open a pull request: stages 1-3 run for the affected project(s); same-repo PRs also get a dev plan when Azure is enabled |
+| Deploy Azure dev | Merge to `main` (or *Run workflow* → `az-infra-generic`, `environment: dev`) → review the plan summary/artifact → approve `azure-dev` |
+| Deploy Azure prod | *Run workflow* → `az-infra-generic`, `environment: prod` (from `main`) → review → approval by the `azure-prod` reviewers |
+| Authorize deletions/replacements | Re-run via *Run workflow* with `allow-destroy: true` (still requires approval) |
+| Deploy tp-local | WSL runner online → *Run workflow* → `tp-local`, `local-deploy: true` → approve `tp-local` for each stage → integration tests |
+| Drift detection (Azure) | Weekly schedule: plan only, summary shows any drift; nothing is applied |
+
+### Running the gates locally
+
+```bash
+# Linux / WSL (x86_64): install the pinned, checksum-verified tools once
+ci/scripts/install-tools.sh            # tflint trivy gitleaks actionlint checkov
+ci/scripts/run-local.sh az-infra-generic
+ci/scripts/run-local.sh tp-local
+python3 -m unittest discover -s ci/tests
+```
+
+`run-local.sh` runs the same scripts as CI; gates whose tool is missing are
+shown as SKIPPED (they still run in CI).
+
+### Recommended branch protection for `main`
+
+Require a pull request with at least one approval, require the status checks
+`az-infra-generic / quality / quality gate`, `tp-local / quality / quality gate`
+and `az-infra-generic / 2 · Azure provider & backend checks`, dismiss stale
+approvals, block force pushes. Add a CODEOWNERS file so that changes to
+`ci/`, `.github/`, `.checkov*.yaml` and `.trivyignore.yaml` (the security
+policy itself) require the platform owner's review.
+
+## 12. Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `terraform fmt` gate fails | Run `terraform fmt -recursive <project>` and commit |
+| `init failed … lock file inconsistent` | Provider constraint changed without updating the lock: `terraform init -upgrade -backend=false` then `terraform providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64` |
+| Minimum-version job fails, latest passes | A feature newer than `TERRAFORM_MIN_VERSION` is used: raise the module `required_version` (and `TERRAFORM_MIN_VERSION`) or avoid the feature |
+| TFLint/ShellCheck/actionlint finding | Fix it; for an intentional exception use the tool's inline ignore with a comment explaining why |
+| Trivy HIGH/CRITICAL | Fix, or accept in `<project>/.trivyignore.yaml` (path-scoped, justified, with `expired_at`) |
+| Checkov failed check | Fix, or add the ID to the relevant `.checkov*.yaml` with a justification comment |
+| Gitleaks finding | Treat as a leaked secret: rotate first, then clean the history (§5) |
+| `Azure authentication not configured` | Environment variables `AZURE_CLIENT_ID/TENANT_ID/SUBSCRIPTION_ID` missing on the GitHub environment, or federated credential subject mismatch (`repo:<owner>/<repo>:environment:<name>`) |
+| `backend not configured` | Commit `environments/<env>/backend.hcl` (bootstrap output) or set `TF_STATE_STORAGE_ACCOUNT` |
+| `AuthorizationPermissionMismatch` at init | Missing *Storage Blob Data* role on `tfstate-<env>`, or not yet propagated |
+| Plan 403 on `listClusterUserCredential` | Plan identity lacks *Azure Kubernetes Service Cluster User Role* |
+| Apply refused: `plan was produced for …` | Re-run the pipeline: plans are tied to a commit |
+| Apply refused: destructive plan | Check the listed resources; re-run with `allow-destroy: true` if intended |
+| `Saved plan is stale` | The state changed after review: re-run to plan again |
+| Local stages skipped | See the readiness summary: not a dispatch from `main`, `local-deploy` unchecked, or `TP_LOCAL_RUNNER_ENABLED` not set |
+| Self-hosted job queued forever | The WSL runner is offline: start WSL (`wsl -d Ubuntu-24.04`) and check `sudo ./svc.sh status` in `~/actions-runner` |
+| `root privileges are required … sudo -v` on the runner | Expected for install/channel changes: run that bootstrap apply interactively in WSL |
+
+## 13. Status
+
+| Item | State |
+|---|---|
+| Workflows, scripts, policies, configuration | Implemented |
+| Validated locally | Python suites (helpers, plan report incl. a real Terraform plan, apply guard, workflow and security policy tests); every Terraform gate of both projects through `run-local.sh`; plan + guard end to end on `tp-local/bootstrap`; script behaviour suites |
+| Not executable here (no tool / access) | TFLint, ShellCheck, actionlint, Gitleaks, Trivy, Checkov, the minimum-version job: their **first GitHub Actions run** is their first execution and establishes the findings baseline (fix or explicitly accept, §5) |
+| Pending Azure access | Azure identities, GitHub environments, `AZURE_DEPLOYMENT_ENABLED`; no Azure plan or apply has ever run |
+| Pending WSL runner | Self-hosted runner registration, `TP_LOCAL_RUNNER_ENABLED`; no local deployment has run through CI |
