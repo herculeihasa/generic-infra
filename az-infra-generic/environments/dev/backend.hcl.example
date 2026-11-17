@@ -1,0 +1,11 @@
+# Backend settings supplied at `terraform init -backend-config=backend.hcl`.
+#
+# Create backend.hcl from the bootstrap outputs once Azure access exists:
+#
+#   terraform -chdir=../../bootstrap output -raw backend_hcl > backend.hcl
+#
+# or copy this file to backend.hcl and replace the placeholder by hand.
+# The value is a non-sensitive identifier: backend.hcl can be committed.
+# Never add credentials (access keys, SAS tokens, client secrets) here.
+
+storage_account_name = "<STORAGE_ACCOUNT_NAME_FROM_BOOTSTRAP_OUTPUT>"
