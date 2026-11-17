@@ -148,7 +148,50 @@ history and re-run the scan. Never allowlist a real secret.
 
 ## 6. Deployment authorization
 
-Defined with the plan and apply stages implementation.
+A plan never deploys by itself. An apply needs **all** of the following:
+
+| Layer | Mechanism |
+|---|---|
+| Quality gates passed | Plan jobs depend on the `quality` gate (and on `azure-config` for Azure); any failed gate skips plan and apply |
+| Trusted ref and event | Apply jobs run only on `push`/`workflow_dispatch` from `refs/heads/main` (never on pull requests or other branches); enforced in the callers, re-checked by `ci.py apply-guard`, and by policy tests |
+| Manual approval | Apply jobs are bound to a GitHub **environment** with required reviewers (`azure-dev`, `azure-prod`, `tp-local`) |
+| Environment-specific permissions | Each environment holds its own identity (`AZURE_CLIENT_ID`…): read-only identity in `*-plan` environments, deployment identity in the approval environments; deployment branch rule `main` |
+| Production rules | `prod` only on manual dispatch with `environment: prod`; `azure-prod` requires reviewers (≥ 2 recommended, *prevent self-review*, optional wait timer); stricter plan policies (`.checkov-prod.yaml`) |
+| Reviewed plan reused | The plan job uploads the saved plan; the apply job downloads **that** file and runs `terraform apply <planfile>` |
+| Plan/commit consistency | The guard refuses a plan produced for another commit; Terraform refuses a stale plan (state changed since review) |
+| Destructive changes | `ci.py plan-report` lists deletions/replacements in the run summary; the guard refuses them unless the run was dispatched with `allow-destroy: true` |
+| No concurrent applies | Per-environment concurrency group, never cancelled |
+
+### Plan review
+
+Each plan job publishes, in the run summary, the change counts and every
+destructive change, and uploads an artifact `tfplan-<project>-<root>-<env>`
+(saved plan, readable `tfplan.txt`, `summary.md`, `plan-meta.json`; 5-day
+retention). Reviewers approve the environment deployment after reading it.
+The JSON plan is used inside the job only (Checkov plan scan, report),
+because it can contain sensitive values in clear text; the binary plan can
+too, hence the short retention and the private-repository requirement.
+
+### Azure identities (to create when Azure access exists)
+
+| GitHub environment | Identity roles (least privilege) | Branch rule | Reviewers |
+|---|---|---|---|
+| `azure-dev-plan` | Reader on the dev resource group(s) or subscription, *Azure Kubernetes Service Cluster User Role* (the provider reads cluster credentials during refresh), *Storage Blob Data Reader* on `tfstate-dev` (plans run with `-lock=false`) | any (PR plans) | none |
+| `azure-dev` | Contributor + *Role Based Access Control Administrator* on the subscription (creates the resource group and role assignments), *Storage Blob Data Contributor* on `tfstate-dev` | `main` | ≥ 1 |
+| `azure-prod-plan` / `azure-prod` | Same pattern on the production scope and `tfstate-prod` | `main` | ≥ 2, prevent self-review |
+
+Each identity is a user-assigned managed identity (or app registration) with
+a **federated credential** for `repo:<owner>/<repository>:environment:<github-environment>`.
+No client secret is created. Environment variables: `AZURE_CLIENT_ID`,
+`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and `TF_STATE_STORAGE_ACCOUNT`
+unless `environments/<env>/backend.hcl` is committed. Then set the repository
+variable `AZURE_DEPLOYMENT_ENABLED=true`.
+
+### tp-local
+
+`tp-local-plan` (no reviewer) and `tp-local` (required reviewer: you) are
+GitHub environments used by the self-hosted jobs; no secret is needed (local
+state, kubeconfig in the runner user's home).
 
 ## 7. Runners
 

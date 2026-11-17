@@ -104,10 +104,16 @@ case "$scanner" in
     checkov_run workflows --directory "${CI_REPO_ROOT}/.github/workflows" --config-file "${CI_REPO_ROOT}/.checkov.yaml"
     ;;
   checkov-plan)
-    plan_json="${3:?usage: security-scan.sh <project> checkov-plan <tfplan.json>}"
+    plan_json="${3:?usage: security-scan.sh <project> checkov-plan <tfplan.json> [environment]}"
+    environment="${4:-}"
     project_dir="$(ci_project_dir "$target")"
-    checkov_run "${target}-plan" --file "$plan_json" --framework terraform_plan \
-      --config-file "${project_dir}/.checkov.yaml" --repo-root-for-plan-enrichment "$project_dir"
+    # A stricter per-environment configuration (e.g. .checkov-prod.yaml)
+    # takes precedence over the project defaults.
+    config="${project_dir}/.checkov.yaml"
+    [[ -n "$environment" && -f "${project_dir}/.checkov-${environment}.yaml" ]] && config="${project_dir}/.checkov-${environment}.yaml"
+    ci_log "plan policy configuration: ${config#"${CI_REPO_ROOT}"/}"
+    checkov_run "${target}-${environment:-plan}-plan" --file "$plan_json" --framework terraform_plan \
+      --config-file "$config" --repo-root-for-plan-enrichment "$project_dir"
     ;;
   *) ci_die "unknown scanner '${scanner}'" ;;
 esac

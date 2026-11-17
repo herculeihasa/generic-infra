@@ -1,0 +1,107 @@
+# Reusable workflow: stage 4, Terraform plan of one deployable root.
+# Produces the reviewed plan artifact that _terraform-apply.yml applies as-is.
+name: terraform-plan
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Project directory.
+        type: string
+        required: true
+      root:
+        description: Terraform root to plan, relative to the project (e.g. environments/dev).
+        type: string
+        required: true
+      environment:
+        description: Logical environment (dev, prod, local).
+        type: string
+        required: true
+      platform:
+        description: azure (azurerm backend, OIDC) or wsl (local state on the self-hosted runner).
+        type: string
+        required: true
+      github-environment:
+        description: GitHub environment holding the plan identity (read-only, no approval).
+        type: string
+        required: true
+      runner:
+        description: JSON runs-on value, e.g. '"ubuntu-24.04"' or '["self-hosted","linux","wsl","microk8s"]'.
+        type: string
+        required: true
+    outputs:
+      has-changes:
+        description: '"true" when the plan changes resources or outputs.'
+        value: ${{ jobs.plan.outputs.has-changes }}
+      has-destroy:
+        description: '"true" when the plan deletes or replaces resources.'
+        value: ${{ jobs.plan.outputs.has-destroy }}
+      artifact:
+        description: Name of the uploaded plan artifact.
+        value: ${{ jobs.plan.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: "4 · plan ${{ inputs.project }}/${{ inputs.root }} (${{ inputs.environment }})"
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    environment: ${{ inputs.github-environment }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # OIDC token for Azure (unused on the WSL runner)
+    outputs:
+      has-changes: ${{ steps.plan.outputs.has-changes }}
+      has-destroy: ${{ steps.plan.outputs.has-destroy }}
+      artifact: ${{ steps.settings.outputs.artifact }}
+    env:
+      PROJECT: ${{ inputs.project }}
+      ROOT: ${{ inputs.root }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      PLATFORM: ${{ inputs.platform }}
+      # Azure: workload identity federation, IDs from the GitHub environment.
+      ARM_USE_OIDC: ${{ inputs.platform == 'azure' && 'true' || '' }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan settings
+        id: settings
+        run: |
+          slug="${PROJECT}-${ROOT//\//-}-${ENVIRONMENT}"
+          {
+            echo "terraform-version=$(tr -d '[:space:]' < "${PROJECT}/.terraform-version")"
+            echo "artifact=tfplan-${slug}"
+            echo "dir=.ci-reports/plan/${slug}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup Terraform (hosted runners; the WSL runner has it installed)
+        if: inputs.platform != 'wsl'
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.settings.outputs.terraform-version }}
+          terraform_wrapper: false
+
+      - name: Install Checkov (plan-level policies)
+        run: ci/scripts/install-tools.sh checkov
+
+      - name: Terraform plan + destructive-change report + plan policies
+        id: plan
+        run: ci/scripts/tf-plan.sh "$PROJECT" "$ROOT" "$ENVIRONMENT" "$PLATFORM"
+
+      # The binary plan is the exact artifact applied after approval. It may
+      # contain sensitive values: short retention, private repository.
+      - name: Upload reviewed plan
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.settings.outputs.artifact }}
+          path: ${{ steps.settings.outputs.dir }}
+          retention-days: 5
+          if-no-files-found: error

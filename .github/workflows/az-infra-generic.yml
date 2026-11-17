@@ -87,3 +87,94 @@ jobs:
               echo "(repository variable \`AZURE_DEPLOYMENT_ENABLED\` is not \`true\`). No deployment happened."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # ---------------------------------------------------------------------------
+  # dev: plan on PRs from this repository (review), pushes, schedule (drift)
+  # and manual runs; apply only from main after approval (environment azure-dev).
+  # ---------------------------------------------------------------------------
+  plan-dev:
+    name: plan dev
+    needs: azure-readiness
+    if: >-
+      needs.azure-readiness.outputs.enabled == 'true'
+      && (github.event_name != 'workflow_dispatch' || inputs.environment == 'dev')
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_terraform-plan.yml
+    with:
+      project: az-infra-generic
+      root: environments/dev
+      environment: dev
+      platform: azure
+      github-environment: azure-dev-plan
+      runner: '"ubuntu-24.04"'
+
+  apply-dev:
+    name: apply dev
+    needs: plan-dev
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && needs.plan-dev.outputs.has-changes == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      project: az-infra-generic
+      root: environments/dev
+      environment: dev
+      platform: azure
+      github-environment: azure-dev
+      runner: '"ubuntu-24.04"'
+      artifact: ${{ needs.plan-dev.outputs.artifact }}
+      allow-destroy: ${{ inputs.allow-destroy == true }}
+
+  # ---------------------------------------------------------------------------
+  # prod: manual dispatch only, from main, stricter plan policies
+  # (.checkov-prod.yaml) and its own approval environment (azure-prod).
+  # Fails explicitly until environments/prod exists.
+  # ---------------------------------------------------------------------------
+  plan-prod:
+    name: plan prod
+    needs: azure-readiness
+    if: >-
+      needs.azure-readiness.outputs.enabled == 'true'
+      && github.event_name == 'workflow_dispatch'
+      && github.ref == 'refs/heads/main'
+      && inputs.environment == 'prod'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_terraform-plan.yml
+    with:
+      project: az-infra-generic
+      root: environments/prod
+      environment: prod
+      platform: azure
+      github-environment: azure-prod-plan
+      runner: '"ubuntu-24.04"'
+
+  apply-prod:
+    name: apply prod
+    needs: plan-prod
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event_name == 'workflow_dispatch'
+      && inputs.environment == 'prod'
+      && needs.plan-prod.outputs.has-changes == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      project: az-infra-generic
+      root: environments/prod
+      environment: prod
+      platform: azure
+      github-environment: azure-prod
+      runner: '"ubuntu-24.04"'
+      artifact: ${{ needs.plan-prod.outputs.artifact }}
+      allow-destroy: ${{ inputs.allow-destroy == true }}

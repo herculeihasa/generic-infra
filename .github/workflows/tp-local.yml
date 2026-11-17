@@ -102,3 +102,89 @@ jobs:
         run: |
           terraform version
           microk8s version || echo "MicroK8s not installed yet: the bootstrap stage installs it (needs interactive sudo the first time)."
+
+  # ---------------------------------------------------------------------------
+  # Self-hosted WSL runner: stage 1 (MicroK8s) then stage 2 (Kubernetes/Helm),
+  # each planned, approved (environment tp-local) and applied from its saved
+  # plan, then integration tests. Same guard on every job: manual dispatch
+  # from main with the runner enabled.
+  # ---------------------------------------------------------------------------
+  local-plan-bootstrap:
+    name: local plan bootstrap
+    needs: [local-readiness, local-preflight]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.local-readiness.outputs.enabled == 'true'
+    uses: ./.github/workflows/_terraform-plan.yml
+    with:
+      project: tp-local
+      root: bootstrap
+      environment: local
+      platform: wsl
+      github-environment: tp-local-plan
+      runner: '["self-hosted", "linux", "wsl", "microk8s"]'
+
+  local-apply-bootstrap:
+    name: local apply bootstrap
+    needs: local-plan-bootstrap
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.local-plan-bootstrap.outputs.has-changes == 'true'
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      project: tp-local
+      root: bootstrap
+      environment: local
+      platform: wsl
+      github-environment: tp-local
+      runner: '["self-hosted", "linux", "wsl", "microk8s"]'
+      artifact: ${{ needs.local-plan-bootstrap.outputs.artifact }}
+      allow-destroy: ${{ inputs.allow-destroy == true }}
+
+  local-plan-dev:
+    name: local plan environments/dev
+    needs: [local-readiness, local-plan-bootstrap, local-apply-bootstrap]
+    # Runs after the bootstrap apply, or directly when the bootstrap had no change.
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      && needs.local-readiness.outputs.enabled == 'true'
+      && needs.local-plan-bootstrap.result == 'success'
+      && (needs.local-apply-bootstrap.result == 'success' || needs.local-apply-bootstrap.result == 'skipped')
+    uses: ./.github/workflows/_terraform-plan.yml
+    with:
+      project: tp-local
+      root: environments/dev
+      environment: local
+      platform: wsl
+      github-environment: tp-local-plan
+      runner: '["self-hosted", "linux", "wsl", "microk8s"]'
+
+  local-apply-dev:
+    name: local apply environments/dev
+    needs: local-plan-dev
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.local-plan-dev.outputs.has-changes == 'true'
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      project: tp-local
+      root: environments/dev
+      environment: local
+      platform: wsl
+      github-environment: tp-local
+      runner: '["self-hosted", "linux", "wsl", "microk8s"]'
+      artifact: ${{ needs.local-plan-dev.outputs.artifact }}
+      allow-destroy: ${{ inputs.allow-destroy == true }}
+
+  local-integration:
+    name: "5 · local integration tests (self-hosted)"
+    needs: [local-readiness, local-plan-dev, local-apply-dev]
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      && needs.local-readiness.outputs.enabled == 'true'
+      && needs.local-plan-dev.result == 'success'
+      && (needs.local-apply-dev.result == 'success' || needs.local-apply-dev.result == 'skipped')
+    runs-on: [self-hosted, linux, wsl, microk8s]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Cluster health, add-ons, namespaces, Helm, application through the ingress
+        run: bash tp-local/scripts/verify-cluster.sh

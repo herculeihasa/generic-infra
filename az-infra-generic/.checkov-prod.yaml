@@ -1,0 +1,22 @@
+# Checkov configuration for PRODUCTION plans of az-infra-generic
+# (ci/scripts/security-scan.sh checkov-plan ... prod). Stricter than the
+# project defaults: the dev-only acceptances for the AKS API exposure and SKU
+# do not apply, so a production plan must restrict the API server (authorized
+# IP ranges and/or private cluster) and use a paid SKU.
+framework:
+  - terraform_plan
+compact: true
+quiet: true
+
+skip-check:
+  # Optional hardening still left to the platform owner's decision (module
+  # inputs exist); record any additional production exception here with a
+  # justification.
+  # Customer-managed keys for node disks.
+  - CKV_AZURE_117
+  # Encryption at host (subscription feature registration required).
+  - CKV_AZURE_227
+  # Ephemeral OS disks (depends on the VM size chosen for production).
+  - CKV_AZURE_226
+  # max_pods left to AKS (250 with Azure CNI Overlay).
+  - CKV_AZURE_168

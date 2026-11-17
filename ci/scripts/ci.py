@@ -7,6 +7,8 @@ self-hosted WSL runner and developer machines.
     python3 ci/scripts/ci.py manifest <project> <key>
     python3 ci/scripts/ci.py changes <project> [--base SHA] [--head SHA] [--all]
     python3 ci/scripts/ci.py azure-config <project>
+    python3 ci/scripts/ci.py plan-report <tfplan.json> [--summary F] [--meta F ...]
+    python3 ci/scripts/ci.py apply-guard <plan-meta.json>
     python3 ci/scripts/ci.py gate            (reads $NEEDS_JSON)
 
 `changes` prints a JSON object and, when $GITHUB_OUTPUT is set, also writes
@@ -199,6 +201,107 @@ def cmd_azure_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def summarize_plan(plan: dict) -> dict:
+    """Classify resource changes of `terraform show -json <planfile>`."""
+    summary = {"create": [], "update": [], "replace": [], "delete": []}
+    for rc in plan.get("resource_changes", []):
+        actions = rc.get("change", {}).get("actions", [])
+        address = rc.get("address", "?")
+        if "delete" in actions and "create" in actions:
+            summary["replace"].append(address)
+        elif "delete" in actions:
+            summary["delete"].append(address)
+        elif "create" in actions:
+            summary["create"].append(address)
+        elif "update" in actions:
+            summary["update"].append(address)
+    counts = {k: len(v) for k, v in summary.items()}
+    outputs_changed = any("no-op" not in (oc.get("actions") or ["no-op"])
+                          for oc in (plan.get("output_changes") or {}).values())
+    return {
+        "counts": counts,
+        "destructive": sorted(summary["delete"] + summary["replace"]),
+        "has_changes": any(counts.values()) or outputs_changed,
+        "has_destroy": bool(summary["delete"] or summary["replace"]),
+        "details": summary,
+    }
+
+
+def plan_markdown(report: dict, title: str) -> str:
+    c = report["counts"]
+    lines = [f"### Terraform plan: {title}", "",
+             f"| create | update | replace | delete |", "|---|---|---|---|",
+             f"| {c['create']} | {c['update']} | {c['replace']} | {c['delete']} |", ""]
+    if report["has_destroy"]:
+        lines += ["> [!WARNING]", "> **Destructive changes.** Apply is blocked unless `allow-destroy` is explicitly set:", ""]
+        lines += [f"- `{a}`" for a in report["destructive"]]
+    elif not report["has_changes"]:
+        lines.append("No changes. Infrastructure matches the configuration.")
+    else:
+        lines.append("No destructive change.")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_plan_report(args: argparse.Namespace) -> int:
+    plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
+    report = summarize_plan(plan)
+    md = plan_markdown(report, args.title)
+    if args.summary:
+        Path(args.summary).write_text(md, encoding="utf-8")
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+            fh.write(md)
+    if args.meta:
+        meta = {
+            "project": args.project, "root": args.root, "environment": args.environment,
+            "sha": os.environ.get("GITHUB_SHA") or subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True).stdout.strip(),
+            "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
+            "terraform_version": plan.get("terraform_version"),
+            "has_changes": report["has_changes"], "has_destroy": report["has_destroy"],
+            "counts": report["counts"], "destructive": report["destructive"],
+        }
+        Path(args.meta).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a", encoding="utf-8") as fh:
+            fh.write(f"has-changes={'true' if report['has_changes'] else 'false'}\n")
+            fh.write(f"has-destroy={'true' if report['has_destroy'] else 'false'}\n")
+    print(md)
+    return 0
+
+
+def apply_guard_problems(meta: dict, current_sha: str | None, allow_destroy: bool, ref: str | None, event: str | None) -> list[str]:
+    problems = []
+    if ref is not None and ref != "refs/heads/main":
+        problems.append(f"apply is only allowed from refs/heads/main (got {ref})")
+    if event is not None and event not in ("push", "workflow_dispatch"):
+        problems.append(f"apply is only allowed on push or workflow_dispatch (got {event})")
+    if current_sha and meta.get("sha") != current_sha:
+        problems.append(f"the plan was produced for {meta.get('sha')}, not for the commit being deployed ({current_sha})")
+    if meta.get("has_destroy") and not allow_destroy:
+        problems.append("the plan deletes or replaces resources ("
+                        + ", ".join(meta.get("destructive", [])) + "); re-run with allow-destroy to authorize it")
+    return problems
+
+
+def cmd_apply_guard(args: argparse.Namespace) -> int:
+    meta = json.loads(Path(args.meta).read_text(encoding="utf-8"))
+    problems = apply_guard_problems(
+        meta,
+        current_sha=os.environ.get("GITHUB_SHA"),
+        allow_destroy=os.environ.get("ALLOW_DESTROY", "false").lower() == "true",
+        ref=os.environ.get("GITHUB_REF"),
+        event=os.environ.get("GITHUB_EVENT_NAME"),
+    )
+    for p in problems:
+        print(f"::error::{p}" if os.environ.get("GITHUB_ACTIONS") else f"ERROR: {p}")
+    if problems:
+        return 1
+    print(f"apply guard passed for {meta['project']}/{meta['root']} ({meta['environment']}) at {meta['sha']}")
+    return 0
+
+
 def evaluate_gate(needs: dict) -> tuple[bool, list[str]]:
     """Aggregate GitHub `needs` results: only success/skipped pass.
 
@@ -246,6 +349,20 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("azure-config", help="static Azure provider and backend checks (no credentials)")
     p.add_argument("project")
     p.set_defaults(func=cmd_azure_config)
+
+    p = sub.add_parser("plan-report", help="classify a plan (terraform show -json) and flag destructive changes")
+    p.add_argument("plan_json")
+    p.add_argument("--title", default="plan")
+    p.add_argument("--summary", help="write the Markdown summary to this file")
+    p.add_argument("--meta", help="write plan metadata (sha, counts, destructive) to this JSON file")
+    p.add_argument("--project")
+    p.add_argument("--root")
+    p.add_argument("--environment")
+    p.set_defaults(func=cmd_plan_report)
+
+    p = sub.add_parser("apply-guard", help="refuse an apply from a wrong ref/event/commit or a non-authorized destructive plan")
+    p.add_argument("meta", help="plan metadata JSON written by plan-report --meta")
+    p.set_defaults(func=cmd_apply_guard)
 
     p = sub.add_parser("gate", help="fail unless every needed job succeeded or was skipped")
     p.add_argument("--env-var", default="NEEDS_JSON", help="environment variable holding toJSON(needs)")

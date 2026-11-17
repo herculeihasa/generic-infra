@@ -1,0 +1,103 @@
+# Reusable workflow: stage 5, apply the reviewed plan after approval.
+#
+# Authorization layers:
+# 1. the caller only invokes it from main on push/manual runs;
+# 2. the job is bound to a GitHub environment: required reviewers, deployment
+#    branch rule (main), environment-scoped deployment identity;
+# 3. ci.py apply-guard re-checks ref, event, commit and destructive changes;
+# 4. Terraform refuses a stale saved plan.
+name: terraform-apply
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Project directory.
+        type: string
+        required: true
+      root:
+        description: Terraform root, relative to the project.
+        type: string
+        required: true
+      environment:
+        description: Logical environment (dev, prod, local).
+        type: string
+        required: true
+      platform:
+        description: azure or wsl.
+        type: string
+        required: true
+      github-environment:
+        description: GitHub environment with the approval rules and the deployment identity.
+        type: string
+        required: true
+      runner:
+        description: JSON runs-on value.
+        type: string
+        required: true
+      artifact:
+        description: Plan artifact produced by _terraform-plan.yml in this run.
+        type: string
+        required: true
+      allow-destroy:
+        description: Explicit authorization for a plan that deletes or replaces resources.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: "5 · apply ${{ inputs.project }}/${{ inputs.root }} (${{ inputs.environment }})"
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    environment: ${{ inputs.github-environment }}
+    timeout-minutes: 90
+    # One apply at a time per root and environment; never cancel an apply.
+    concurrency:
+      group: terraform-apply-${{ inputs.project }}-${{ inputs.environment }}-${{ inputs.root }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # OIDC token for Azure (unused on the WSL runner)
+    env:
+      PROJECT: ${{ inputs.project }}
+      ROOT: ${{ inputs.root }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      PLATFORM: ${{ inputs.platform }}
+      ALLOW_DESTROY: ${{ inputs.allow-destroy }}
+      ARM_USE_OIDC: ${{ inputs.platform == 'azure' && 'true' || '' }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Apply settings
+        id: settings
+        run: |
+          {
+            echo "terraform-version=$(tr -d '[:space:]' < "${PROJECT}/.terraform-version")"
+            echo "dir=.ci-reports/plan/${PROJECT}-${ROOT//\//-}-${ENVIRONMENT}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup Terraform (hosted runners)
+        if: inputs.platform != 'wsl'
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.settings.outputs.terraform-version }}
+          terraform_wrapper: false
+
+      - name: Download the reviewed plan
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ steps.settings.outputs.dir }}
+
+      - name: Guard + terraform apply <saved plan>
+        env:
+          PLAN_DIR: ${{ steps.settings.outputs.dir }}
+        run: ci/scripts/tf-apply.sh "$PROJECT" "$ROOT" "$ENVIRONMENT" "$PLATFORM" "$PLAN_DIR"
