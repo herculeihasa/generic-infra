@@ -112,6 +112,33 @@ def cmd_changes(args: argparse.Namespace) -> int:
     return 0
 
 
+def evaluate_gate(needs: dict) -> tuple[bool, list[str]]:
+    """Aggregate GitHub `needs` results: only success/skipped pass.
+
+    The change-detection job must itself succeed: if it failed, the other
+    jobs were skipped and a green gate would be meaningless.
+    """
+    problems = [f"{job}: {data.get('result')}" for job, data in sorted(needs.items())
+                if data.get("result") not in ("success", "skipped")]
+    if "changes" in needs and needs["changes"].get("result") != "success":
+        problems.append("changes: change detection did not succeed")
+    return (not problems), sorted(set(problems))
+
+
+def cmd_gate(args: argparse.Namespace) -> int:
+    needs = json.loads(os.environ.get(args.env_var) or "{}")
+    if not needs:
+        raise SystemExit(f"error: ${args.env_var} is empty")
+    ok, problems = evaluate_gate(needs)
+    for job, data in sorted(needs.items()):
+        print(f"{job:<24} {data.get('result')}")
+    if not ok:
+        print("quality gate FAILED: " + "; ".join(problems), file=sys.stderr)
+        return 1
+    print("quality gate passed")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -128,6 +155,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--all", action="store_true", help="select every root")
     p.add_argument("--workflow-file", help="project caller workflow (its change re-validates everything)")
     p.set_defaults(func=cmd_changes)
+
+    p = sub.add_parser("gate", help="fail unless every needed job succeeded or was skipped")
+    p.add_argument("--env-var", default="NEEDS_JSON", help="environment variable holding toJSON(needs)")
+    p.set_defaults(func=cmd_gate)
 
     args = parser.parse_args(argv)
     return args.func(args)

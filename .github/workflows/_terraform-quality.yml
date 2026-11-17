@@ -1,0 +1,200 @@
+# Reusable workflow: quality gates (stages 1-2) for one Terraform project.
+# Called by the per-project workflows; see docs/ci-cd.md.
+#
+# Conventions enforced by ci/tests/test_workflows.py:
+# - actions pinned by full commit SHA;
+# - no ${{ }} expression inside `run:` scripts (values go through `env:`);
+# - checkout never persists credentials.
+name: terraform-quality
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Project directory, also the name of ci/projects/<project>.json.
+        type: string
+        required: true
+      caller-workflow:
+        description: Path of the calling workflow (changing it re-validates every root).
+        type: string
+        required: true
+    outputs:
+      roots:
+        description: Terraform roots validated by this run (JSON list).
+        value: ${{ jobs.changes.outputs.roots }}
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: ${{ inputs.project }}
+  TF_IN_AUTOMATION: "1"
+  CHECKPOINT_DISABLE: "1"
+
+jobs:
+  changes:
+    name: "1 · change detection"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      roots: ${{ steps.detect.outputs.roots }}
+      run: ${{ steps.detect.outputs.run }}
+      compat-roots: ${{ steps.settings.outputs.compat-roots }}
+      terraform-version: ${{ steps.settings.outputs.terraform-version }}
+      terraform-min-version: ${{ steps.settings.outputs.terraform-min-version }}
+    steps:
+      - name: Checkout (full history for git diff)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect affected Terraform roots
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CALLER_WORKFLOW: ${{ inputs.caller-workflow }}
+        run: |
+          args=(changes "$PROJECT" --base "$BASE_SHA" --head "$HEAD_SHA" --workflow-file "$CALLER_WORKFLOW")
+          # Pull requests validate what changed. Anything that can lead to a
+          # deployment (push to main, manual or scheduled run) validates all roots.
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then args+=(--all); fi
+          python3 ci/scripts/ci.py "${args[@]}"
+
+      - name: Read project settings
+        id: settings
+        run: |
+          source ci/tool-versions.env
+          {
+            echo "terraform-version=$(tr -d '[:space:]' < "${PROJECT}/.terraform-version")"
+            echo "terraform-min-version=${TERRAFORM_MIN_VERSION}"
+            echo "compat-roots=$(python3 ci/scripts/ci.py manifest "$PROJECT" compat_min_terraform)"
+          } >> "$GITHUB_OUTPUT"
+
+  format:
+    name: "1 · terraform fmt"
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ needs.changes.outputs.terraform-version }}
+          terraform_wrapper: false
+      - name: terraform fmt -check
+        run: ci/scripts/terraform-checks.sh "$PROJECT" fmt
+
+  validate:
+    name: "1 · init / validate / test (${{ matrix.root }})"
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        root: ${{ fromJSON(needs.changes.outputs.roots) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ needs.changes.outputs.terraform-version }}
+          terraform_wrapper: false
+      - name: Init (lock file read-only), validate, test
+        env:
+          ROOT: ${{ matrix.root }}
+        run: ci/scripts/terraform-checks.sh "$PROJECT" root "$ROOT"
+
+  compatibility:
+    name: "1 · minimum Terraform version (${{ matrix.root }})"
+    needs: changes
+    if: needs.changes.outputs.run == 'true' && needs.changes.outputs.compat-roots != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        root: ${{ fromJSON(needs.changes.outputs.compat-roots) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ needs.changes.outputs.terraform-min-version }}
+          terraform_wrapper: false
+      - name: Validate and test with the oldest supported Terraform
+        env:
+          ROOT: ${{ matrix.root }}
+        run: ci/scripts/terraform-checks.sh "$PROJECT" root "$ROOT"
+
+  scripts:
+    name: "1 · script tests"
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run the project's script test suites
+        run: ci/scripts/terraform-checks.sh "$PROJECT" scripts
+
+  lint:
+    name: "2 · TFLint / ShellCheck"
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned tools (checksum-verified)
+        run: ci/scripts/install-tools.sh tflint
+      - name: TFLint
+        env:
+          # Read-only token: avoids API rate limits when tflint downloads plugins.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ci/scripts/lint.sh "$PROJECT" tflint
+      - name: ShellCheck (project scripts)
+        run: ci/scripts/lint.sh "$PROJECT" shell
+      - name: ShellCheck (shared CI scripts)
+        run: ci/scripts/lint.sh ci shell
+
+  workflows:
+    name: "2 · workflow lint"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned tools (checksum-verified)
+        run: ci/scripts/install-tools.sh actionlint
+      - name: actionlint + CI unit tests
+        run: ci/scripts/lint.sh repo workflows
+
+  gate:
+    name: quality gate
+    needs: [changes, format, validate, compatibility, scripts, lint, workflows]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Every gate succeeded (or was not applicable)
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 ci/scripts/ci.py gate

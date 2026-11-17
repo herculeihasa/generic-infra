@@ -7,7 +7,8 @@
 # -----------------------------------------------------------------------------
 set -Eeuo pipefail
 
-CI_REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+# cd + pwd normalises to a POSIX path (Git for Windows returns "E:/...").
+CI_REPO_ROOT="$(cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" && pwd)"
 CI_TOOLS_DIR="${CI_TOOLS_DIR:-${HOME}/.cache/azure-infra-ci}"
 CI_BIN_DIR="${CI_TOOLS_DIR}/bin"
 export PATH="${CI_BIN_DIR}:${PATH}"
@@ -44,9 +45,10 @@ ci_load_tool_versions() {
 }
 
 # Manifest helpers (ci/projects/<project>.json).
-ci_manifest() { python3 "${CI_REPO_ROOT}/ci/scripts/ci.py" manifest "$1" "$2"; }
+# (tr -d '\r': Windows Python prints CRLF; harmless on Linux.)
+ci_manifest() { python3 "${CI_REPO_ROOT}/ci/scripts/ci.py" manifest "$1" "$2" | tr -d '\r'; }
 ci_manifest_list() {
-  ci_manifest "$1" "$2" | python3 -c 'import json, sys; [print(x) for x in json.load(sys.stdin)]'
+  ci_manifest "$1" "$2" | python3 -c 'import json, sys; [print(x) for x in json.load(sys.stdin)]' | tr -d '\r'
 }
 
 ci_project_dir() {

@@ -33,13 +33,13 @@ download_verified() {
 
 # install_archive <tool> <version> <url> <sha256> <binary-in-archive>
 install_archive() {
-  local tool="$1" version="$2" url="$3" sha="$4" member="$5" tmp
+  local tool="$1" version="$2" url="$3" sha="$4" member="$5" tmp archive
   if [[ "$(installed_version "$tool")" == "$version" && -x "${CI_BIN_DIR}/${tool}" ]]; then
     ci_log "${tool} ${version} already installed"
     return
   fi
   tmp="$(mktemp -d)"
-  local archive="${tmp}/$(basename "$url")"
+  archive="${tmp}/$(basename "$url")"
   download_verified "$url" "$sha" "$archive"
   case "$archive" in
     *.zip) unzip -q -o "$archive" "$member" -d "$tmp" ;;

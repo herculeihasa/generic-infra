@@ -1,0 +1,4 @@
+# Resolve `source` directives relative to each script's directory, and follow
+# them (lib.sh files are linted through the scripts that source them).
+source-path=SCRIPTDIR
+external-sources=true
