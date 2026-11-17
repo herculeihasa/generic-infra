@@ -1,0 +1,71 @@
+# -----------------------------------------------------------------------------
+# Terraform
+# -----------------------------------------------------------------------------
+
+# Local working directories (provider binaries, module cache, backend cache).
+**/.terraform/*
+
+# State files. Environment state lives in Azure Blob Storage (remote backend).
+# The bootstrap state is local by design: keep it safe OUTSIDE Git (see README).
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Saved plans can contain sensitive values in clear text.
+*.tfplan
+*.tfplan.json
+tfplan
+tfplan.json
+
+# Crash logs can contain sensitive values.
+crash.log
+crash.*.log
+
+# Variable files for secrets or personal values.
+# NOTE: environments/*/terraform.tfvars IS committed and must only hold
+# non-sensitive values. Secrets go through TF_VAR_* / ARM_* environment variables.
+*.secret.tfvars
+*.local.tfvars
+*.local.auto.tfvars
+
+# Local-only override files.
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform CLI configuration files.
+.terraformrc
+terraform.rc
+
+# Child modules do not ship a lock file: the root configuration that consumes
+# them owns provider selection. Root lock files (bootstrap/, environments/*)
+# MUST be committed.
+modules/**/.terraform.lock.hcl
+
+# -----------------------------------------------------------------------------
+# Credentials and local tooling
+# -----------------------------------------------------------------------------
+
+# Environment files holding ARM_* credentials.
+.env
+.env.*
+.envrc
+
+# Kubeconfig files exported from Terraform outputs or the Azure CLI.
+kubeconfig
+*.kubeconfig
+
+# Linters / scanners local caches.
+.tflint.d/
+.terraform-docs-cache/
+
+# -----------------------------------------------------------------------------
+# Editors / OS
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
