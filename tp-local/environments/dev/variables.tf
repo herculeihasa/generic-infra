@@ -68,6 +68,43 @@ variable "retain_storage_class_enabled" {
   default     = true
 }
 
+# -----------------------------------------------------------------------------
+# Applications (Helm)
+# -----------------------------------------------------------------------------
+
+variable "helm_releases" {
+  description = "Helm releases (release name => settings). The chart version must be pinned (exact version) and the namespace must be one of var.namespaces. values_yaml is a values.yaml document (a string, so that releases with different value shapes can share this map)."
+  type = map(object({
+    namespace       = string
+    repository      = string
+    chart           = string
+    version         = string
+    values_yaml     = optional(string, "")
+    timeout_seconds = optional(number, 300)
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for r in values(var.helm_releases) : can(yamldecode(r.values_yaml))])
+    error_message = "helm_releases values_yaml must be valid YAML."
+  }
+
+  validation {
+    condition     = alltrue([for r in values(var.helm_releases) : contains(keys(var.namespaces), r.namespace)])
+    error_message = "Every helm_releases namespace must be declared in var.namespaces (managed baseline first)."
+  }
+
+  validation {
+    condition     = alltrue([for r in values(var.helm_releases) : can(regex("^v?[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$", r.version))])
+    error_message = "helm_releases versions must be exact chart versions (e.g. 6.17.0), not ranges or \"latest\"."
+  }
+
+  validation {
+    condition     = alltrue([for r in values(var.helm_releases) : startswith(r.repository, "https://") || startswith(r.repository, "oci://")])
+    error_message = "helm_releases repositories must use https:// or oci://."
+  }
+}
+
 variable "node_labels" {
   description = "Labels applied to every node (empty = none)."
   type        = map(string)

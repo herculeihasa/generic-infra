@@ -18,6 +18,11 @@ output "api_server_url" {
   value       = local.api_server_url
 }
 
+output "addons" {
+  description = "Add-ons managed by the module (sorted)."
+  value       = sort(keys(var.addons))
+}
+
 output "install_id" {
   description = "ID of the install step (changes when MicroK8s is reinstalled); useful to sequence dependent steps."
   value       = terraform_data.install.id

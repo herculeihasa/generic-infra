@@ -4,8 +4,8 @@
 # Stage 2 of tp-local: Kubernetes resources (namespaces, RBAC, storage) and
 # Helm releases on the cluster provisioned by ../../bootstrap (stage 1).
 #
-#   kubernetes.tf concerns (this file): platform baseline
-#   helm.tf:                            Helm releases (application layer)
+#   main.tf (this file): platform baseline (namespaces, RBAC, storage, nodes)
+#   helm.tf:             Helm releases (application layer)
 # =============================================================================
 
 # Reading the nodes doubles as a connectivity check: the plan fails early if

@@ -24,6 +24,17 @@ output "namespaces" {
   }
 }
 
+output "helm_releases" {
+  description = "Helm releases: namespace, chart version and status (deployed after apply)."
+  value = {
+    for name, release in helm_release.this : name => {
+      namespace = release.namespace
+      chart     = "${release.chart}-${release.version}"
+      status    = release.status
+    }
+  }
+}
+
 output "storage_classes" {
   description = "StorageClasses managed here (in addition to microk8s-hostpath from the add-on)."
   value       = [for sc in kubernetes_storage_class_v1.hostpath_retain : sc.metadata[0].name]

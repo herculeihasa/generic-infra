@@ -42,6 +42,35 @@ namespaces = {
 
 retain_storage_class_enabled = true
 
+# Applications. podinfo is a tiny web app used as the Helm/ingress smoke test:
+#   curl -H 'Host: podinfo.localtest.me' http://$(hostname -I | awk '{print $1}')/
+helm_releases = {
+  podinfo = {
+    namespace   = "apps"
+    repository  = "https://stefanprodan.github.io/podinfo"
+    chart       = "podinfo"
+    version     = "6.17.0"
+    values_yaml = <<-YAML
+      replicaCount: 1
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { cpu: 100m, memory: 64Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+        seccompProfile: { type: RuntimeDefault }
+      ingress:
+        enabled: true
+        className: public   # MicroK8s ingress add-on class
+        hosts:
+          - host: podinfo.localtest.me
+            paths:
+              - path: /
+                pathType: ImplementationSpecific
+    YAML
+  }
+}
+
 node_labels = {
   "tp-local/role" = "dev"
 }

@@ -7,6 +7,8 @@
 #
 #   install     snap install (once) + CLI access for the current user
 #   channel     snap refresh when var.channel changes (in place, keeps data)
+#   addon[*]    one resource per add-on: enable on create, disable on destroy
+#   ready       readiness gate (services, node, deployments, daemonsets)
 #   kubeconfig  admin kubeconfig export, server rewritten to 127.0.0.1
 #
 # Re-run a step after manual changes on the host, e.g.:
@@ -61,6 +63,64 @@ resource "terraform_data" "channel" {
   depends_on = [terraform_data.install]
 }
 
+# One resource per add-on so that removing an entry disables only that
+# add-on. Changing its arguments re-enables it (disable + enable).
+resource "terraform_data" "addon" {
+  for_each = var.addons
+
+  triggers_replace = [
+    terraform_data.install.id,
+    jsonencode(each.value.args),
+  ]
+
+  input = {
+    name        = each.key
+    channel     = var.channel
+    scripts_dir = local.scripts_dir
+  }
+
+  # Terraform appends `command` as ONE argument: the script goes in the
+  # interpreter list and the action is the command.
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "${local.scripts_dir}/addon.sh"]
+    command     = "enable"
+    environment = {
+      ADDON_NAME       = each.key
+      ADDON_ARGS       = join("\n", each.value.args)
+      MICROK8S_CHANNEL = var.channel
+    }
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "${self.input.scripts_dir}/addon.sh"]
+    command     = "disable"
+    environment = {
+      ADDON_NAME       = self.input.name
+      MICROK8S_CHANNEL = self.input.channel
+    }
+  }
+
+  depends_on = [terraform_data.channel]
+}
+
+resource "terraform_data" "ready" {
+  triggers_replace = [
+    terraform_data.install.id,
+    terraform_data.channel.id,
+    sort([for addon in terraform_data.addon : addon.id]),
+  ]
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash"]
+    command     = "${local.scripts_dir}/wait-ready.sh"
+    environment = {
+      MICROK8S_CHANNEL     = var.channel
+      WAIT_TIMEOUT_SECONDS = tostring(var.wait_timeout_seconds)
+    }
+  }
+}
+
 resource "terraform_data" "kubeconfig" {
   # Re-exported when the cluster is (re)installed, its channel changes, or
   # the destination/address change.
@@ -94,4 +154,7 @@ resource "terraform_data" "kubeconfig" {
       KUBECONFIG_PATH = self.input.path
     }
   }
+
+  # Exported once the cluster and its add-ons (e.g. rbac) are settled.
+  depends_on = [terraform_data.ready]
 }

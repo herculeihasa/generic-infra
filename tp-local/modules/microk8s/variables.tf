@@ -42,6 +42,27 @@ variable "wait_timeout_seconds" {
   }
 }
 
+variable "addons" {
+  description = "MicroK8s add-ons to enable (name => { args }). args are passed verbatim after the add-on name, e.g. registry = { args = [\"--size\", \"40Gi\"] }. Removing an entry disables that add-on (volume data kept). Add-ons not listed here are left untouched."
+  type = map(object({
+    args = optional(list(string), [])
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for name in keys(var.addons) : can(regex("^[a-z0-9][a-z0-9-]*$", name))])
+    error_message = "Add-on names must be lowercase letters, digits and hyphens (e.g. hostpath-storage)."
+  }
+
+  validation {
+    # Arguments travel through an environment variable and are never
+    # evaluated by a shell; this allowlist keeps them unambiguous.
+    condition     = alltrue(flatten([for a in values(var.addons) : [for arg in a.args : can(regex("^[A-Za-z0-9=:,./_@+-]+$", arg))]]))
+    error_message = "Add-on arguments may only contain letters, digits and = : , . / _ @ + -"
+  }
+}
+
 variable "uninstall_on_destroy" {
   description = "Remove the MicroK8s snap AND all cluster data on `terraform destroy`. False (default) keeps MicroK8s installed and only removes what Terraform added on top of it."
   type        = bool

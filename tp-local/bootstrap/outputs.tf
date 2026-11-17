@@ -3,6 +3,11 @@ output "microk8s_channel" {
   value       = module.microk8s.channel
 }
 
+output "addons" {
+  description = "MicroK8s add-ons managed by Terraform."
+  value       = module.microk8s.addons
+}
+
 output "kubeconfig_path" {
   description = "Exported admin kubeconfig (pass it to environments/dev if not the default)."
   value       = module.microk8s.kubeconfig_path

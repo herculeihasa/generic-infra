@@ -14,6 +14,7 @@ module "microk8s" {
   source = "../modules/microk8s"
 
   channel              = var.microk8s_channel
+  addons               = var.addons
   kubeconfig_path      = var.kubeconfig_path
   api_server_address   = var.api_server_address
   wait_timeout_seconds = var.wait_timeout_seconds

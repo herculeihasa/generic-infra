@@ -22,6 +22,30 @@ variable "wait_timeout_seconds" {
   default     = 600
 }
 
+variable "addons" {
+  description = <<-EOT
+    MicroK8s add-ons to manage (name => { args }). Recommended local-development baseline:
+    - dns:              CoreDNS, required for service discovery.
+    - rbac:             RBAC authorization, so namespaces' Roles/RoleBindings are enforced.
+    - hostpath-storage: dynamic PersistentVolumes on the node (default StorageClass).
+    - metrics-server:   resource metrics for `kubectl top` and HorizontalPodAutoscalers.
+    - ingress:          NGINX ingress controller (namespace "ingress", class "public").
+    Not enabled by default: dashboard (extra attack surface; use kubectl/k9s), registry
+    (enable with { args = ["--size", "20Gi"] } to push images to localhost:32000),
+    observability (heavy Prometheus/Grafana/Loki stack), cert-manager, metallb.
+  EOT
+  type = map(object({
+    args = optional(list(string), [])
+  }))
+  default = {
+    dns              = {}
+    rbac             = {}
+    hostpath-storage = {}
+    metrics-server   = {}
+    ingress          = {}
+  }
+}
+
 variable "uninstall_on_destroy" {
   description = "Remove MicroK8s and ALL cluster data on `terraform destroy` (default: keep it installed)."
   type        = bool
