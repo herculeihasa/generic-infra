@@ -1,0 +1,18 @@
+# Organisation policy: Helm charts are installed from an explicit repository
+# at an explicit version (reproducible, reviewable upgrades).
+metadata:
+  id: "CKV2_AZINFRA_3"
+  name: "Helm releases must pin the chart version and declare the repository"
+  category: "SUPPLY_CHAIN"
+definition:
+  and:
+    - cond_type: "attribute"
+      resource_types:
+        - "helm_release"
+      attribute: "version"
+      operator: "exists"
+    - cond_type: "attribute"
+      resource_types:
+        - "helm_release"
+      attribute: "repository"
+      operator: "exists"

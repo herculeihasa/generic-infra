@@ -1,0 +1,8 @@
+# Checkov configuration for tp-local (ci/scripts/security-scan.sh).
+# Any failed check fails the pipeline. No accepted deviation yet: add entries
+# only with a justification (see docs/ci-cd.md §5).
+framework:
+  - terraform
+compact: true
+quiet: true
+download-external-modules: false

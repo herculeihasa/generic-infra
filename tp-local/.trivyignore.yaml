@@ -1,0 +1,4 @@
+# Trivy accepted findings for tp-local (HIGH/CRITICAL gate).
+# Each entry: id, paths, statement (justification) and expired_at.
+# No accepted finding yet.
+misconfigurations: []

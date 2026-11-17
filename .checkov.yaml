@@ -1,0 +1,11 @@
+# Checkov configuration for the GitHub Actions workflows (repository level).
+framework:
+  - github_actions
+compact: true
+quiet: true
+
+skip-check:
+  # workflow_dispatch inputs are required for manual operations (target
+  # environment, explicit destroy authorization). They are typed (choice /
+  # boolean), never interpolated into scripts, and re-validated by the jobs.
+  - CKV_GHA_7

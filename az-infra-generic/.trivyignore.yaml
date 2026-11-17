@@ -1,0 +1,21 @@
+# Trivy accepted findings for az-infra-generic (HIGH/CRITICAL gate).
+# Each entry: id, paths, statement (justification) and expired_at: once
+# expired, the finding fails the pipeline again and must be re-reviewed.
+misconfigurations:
+  # AKS API server open to the internet (still Entra ID-authenticated): the
+  # module supports authorized ranges and private clusters; dev waits for the
+  # operator/runner egress IPs (TODO(azure-access) in terraform.tfvars).
+  - id: AVD-AZU-0041
+    paths:
+      - "modules/aks/main.tf"
+    statement: "Public API server accepted for dev until authorized ranges are configured; Entra ID auth, no local accounts."
+    expired_at: 2027-03-31
+
+  # State storage network default action Allow: access is Entra ID only
+  # (Shared Key disabled); allowed_ip_ranges / public_network_access restrict
+  # it once runner IPs or private endpoints exist.
+  - id: AVD-AZU-0012
+    paths:
+      - "bootstrap/main.tf"
+    statement: "State account reachable publicly with Entra ID-only authentication until runner IPs / private endpoint are defined."
+    expired_at: 2027-03-31

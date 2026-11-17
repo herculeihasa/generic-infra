@@ -95,7 +95,56 @@ the tool that reported it.
 
 ## 5. Security policy
 
-Defined with the security gates implementation.
+### Failure conditions
+
+| Scanner | Scope | Blocking condition | Reports |
+|---|---|---|---|
+| Gitleaks | Commits of the PR (`base..head`) or push (`before..sha`); full history on manual/scheduled runs | any secret | `gitleaks.sarif` |
+| Trivy `config` | Project directory (Terraform; Kubernetes manifests when present) | any HIGH/CRITICAL not accepted in `<project>/.trivyignore.yaml` | `trivy.sarif` (all severities), HIGH/CRITICAL and LOW/MEDIUM tables |
+| Checkov | Project directory (`terraform` framework) + custom policies | any failed check not accepted in `<project>/.checkov.yaml` | `checkov-<project>.sarif` |
+| Checkov | `.github/workflows` (`github_actions` framework) | any failed check not accepted in `/.checkov.yaml` | `checkov-workflows.sarif` |
+| Checkov | Terraform plan JSON (stage 4) | any failed check | `checkov-<project>-plan.sarif` |
+
+Reports are uploaded as the `security-reports-<project>` artifact (14 days).
+All scanners run even when an earlier one failed, so one run lists every
+finding. Secret scanning runs on every change, documentation included.
+
+### Policy-as-code (custom Checkov policies, `ci/policies/checkov/`)
+
+| ID | Rule |
+|---|---|
+| `CKV2_AZINFRA_1` | Storage accounts: Shared Key disabled, TLS 1.2, infrastructure encryption |
+| `CKV2_AZINFRA_2` | AKS: Kubernetes RBAC, OIDC issuer, local accounts disabled |
+| `CKV2_AZINFRA_3` | Helm releases: explicit repository and pinned chart version |
+| `CKV2_AZINFRA_4` | Kubernetes service accounts: no API token automount |
+
+### Accepting a finding
+
+A finding is **fixed** by default. Accepting it is a reviewed code change:
+
+* **Checkov:** add the check ID to `skip-check` in the relevant
+  `.checkov.yaml`, preceded by a comment explaining why (enforced by
+  `ci/tests/test_security_config.py`).
+* **Trivy:** add an entry to `<project>/.trivyignore.yaml` with `id`,
+  `paths` (scoped), `statement` (justification) and `expired_at`. When it
+  expires the finding fails the pipeline again (also enforced by tests).
+* Thresholds are never lowered; scanners are never disabled to pass.
+
+Currently accepted (all about optional hardening the code supports but `dev`
+does not enable yet):
+
+| Where | Finding | Reason | Exit path |
+|---|---|---|---|
+| az-infra-generic (Checkov) | AKS authorized IP ranges / private cluster (`CKV_AZURE_6`, `CKV_AZURE_115`), Free SKU (`CKV_AZURE_170`), CMK disks, host encryption, ephemeral OS disk, max pods (`CKV_AZURE_117/227/226/168`) | Module inputs exist; dev keeps cost-effective, reachable defaults | Enable in the environment; production plan check (stage 4) |
+| az-infra-generic (Checkov) | State storage CMK, private endpoint, default Deny, public access, queue logging, SAS policy (`CKV2_AZURE_1/33`, `CKV_AZURE_35/59/33`, `CKV2_AZURE_41`) | Entra ID-only account, Shared Key disabled, no queue usage | `allowed_ip_ranges` / private endpoint when runner IPs exist |
+| az-infra-generic (Trivy) | `AVD-AZU-0041` (AKS API authorized IPs), `AVD-AZU-0012` (storage default action) | Same as above | Expire 2027-03-31 |
+| repository (Checkov) | `CKV_GHA_7` (workflow_dispatch inputs) | Typed inputs needed for manual, authorized operations; never interpolated into scripts | — |
+
+### Secret exposure procedure
+
+If Gitleaks reports a real secret: revoke/rotate it immediately (the
+history is already exposed to anyone with read access), then remove it from
+history and re-run the scan. Never allowlist a real secret.
 
 ## 6. Deployment authorization
 

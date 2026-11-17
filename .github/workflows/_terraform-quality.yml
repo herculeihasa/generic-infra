@@ -184,9 +184,49 @@ jobs:
       - name: actionlint + CI unit tests
         run: ci/scripts/lint.sh repo workflows
 
+  security:
+    name: "3 · security (gitleaks, trivy, checkov)"
+    # Runs for every change, documentation included: a secret can leak anywhere.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout (full history for Gitleaks)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned scanners (checksum-verified)
+        run: ci/scripts/install-tools.sh gitleaks trivy checkov
+      - name: Gitleaks (secrets in the new commits)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ci/scripts/security-scan.sh "$PROJECT" gitleaks
+      # Every scanner runs even if a previous one failed, so a single run
+      # reports all findings; the job still fails.
+      - name: Trivy (HIGH/CRITICAL misconfigurations)
+        if: success() || failure()
+        run: ci/scripts/security-scan.sh "$PROJECT" trivy
+      - name: Checkov (project policies)
+        if: success() || failure()
+        run: ci/scripts/security-scan.sh "$PROJECT" checkov
+      - name: Checkov (workflow hardening)
+        if: success() || failure()
+        run: ci/scripts/security-scan.sh repo checkov-workflows
+      - name: Upload security reports
+        if: success() || failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: security-reports-${{ inputs.project }}
+          path: .ci-reports/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: ignore
+
   gate:
     name: quality gate
-    needs: [changes, format, validate, compatibility, scripts, lint, workflows]
+    needs: [changes, format, validate, compatibility, scripts, lint, workflows, security]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

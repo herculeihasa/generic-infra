@@ -1,0 +1,49 @@
+# Checkov configuration for az-infra-generic (ci/scripts/security-scan.sh).
+# Any failed check fails the pipeline, except the explicitly accepted
+# deviations below. Every entry needs a justification and is reviewed when
+# the corresponding environment changes; production compliance is enforced on
+# the production plan (see docs/ci-cd.md §5).
+framework:
+  - terraform
+compact: true
+quiet: true
+download-external-modules: false
+
+skip-check:
+  # --- Optional hardening the module SUPPORTS, deliberately off in dev ------
+  # AKS API server authorized IP ranges: dev keeps a public API until operator
+  # and runner egress IPs are known (TODO(azure-access) in terraform.tfvars).
+  - CKV_AZURE_6
+  # AKS private cluster: private_cluster_enabled input; dev is public so it is
+  # reachable without VPN / private runners.
+  - CKV_AZURE_115
+  # AKS paid SKU: module default is Standard; dev uses Free on purpose (cost).
+  - CKV_AZURE_170
+  # AKS disk encryption set (customer-managed keys): disk_encryption_set_id
+  # input; platform-managed encryption accepted outside regulated workloads.
+  - CKV_AZURE_117
+  # Encryption at host: needs the EncryptionAtHost subscription feature;
+  # host_encryption_enabled input per pool.
+  - CKV_AZURE_227
+  # Ephemeral OS disks: Managed by default for VM-size portability; Ephemeral
+  # supported per pool (os_disk_type).
+  - CKV_AZURE_226
+  # Minimum 50 pods per node: max_pods = null lets AKS pick (250 with Azure
+  # CNI Overlay).
+  - CKV_AZURE_168
+
+  # --- Terraform state storage account -------------------------------------
+  # Customer-managed keys: infrastructure (double) encryption with
+  # Microsoft-managed keys accepted for state; CMK can be added.
+  - CKV2_AZURE_1
+  # Private endpoint / network default Deny / public network access: access
+  # is Entra ID only (Shared Key disabled); IP filtering through
+  # allowed_ip_ranges and public_network_access once runner IPs are known.
+  - CKV2_AZURE_33
+  - CKV_AZURE_35
+  - CKV_AZURE_59
+  # Queue service logging: the state account uses blobs only (azurerm 5.x
+  # removed queue_properties from azurerm_storage_account).
+  - CKV_AZURE_33
+  # SAS expiration policy: Shared Key, hence key-based SAS, is disabled.
+  - CKV2_AZURE_41
