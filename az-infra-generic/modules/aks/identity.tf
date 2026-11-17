@@ -29,3 +29,21 @@ resource "azurerm_role_assignment" "network_contributor" {
   skip_service_principal_aad_check = true
   description                      = "AKS ${var.name} control plane: manage networking in subnet '${each.key}'."
 }
+
+# =============================================================================
+# Kubelet identity
+#
+# Created by AKS in the node resource group; used by nodes to pull images.
+# AcrPull keeps registries free of admin credentials and image pull secrets.
+# =============================================================================
+
+resource "azurerm_role_assignment" "acr_pull" {
+  for_each = var.container_registry_ids
+
+  scope                            = each.value
+  role_definition_name             = "AcrPull"
+  principal_id                     = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+  description                      = "AKS ${var.name} kubelet: pull images from registry '${each.key}'."
+}

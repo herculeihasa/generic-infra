@@ -13,9 +13,10 @@ calling configuration owns those and passes them in by ID.
 | `versions.tf` | Minimum Terraform / `azurerm` versions (no provider block) |
 | `variables.tf` | Module interface: inputs, defaults, validations |
 | `locals.tf` | Derived values |
-| `identity.tf` | Control plane user-assigned identity |
+| `identity.tf` | Control plane identity, subnet and registry role assignments |
 | `main.tf` | AKS cluster |
 | `node_pools.tf` | Additional node pools |
+| `monitoring.tf` | Container Insights data collection rule, control plane diagnostic settings |
 | `outputs.tf` | Outputs |
 | `tests/` | Offline `terraform test` suites using a mocked `azurerm` provider |
 

@@ -690,3 +690,206 @@ variable "auto_scaler_profile" {
     error_message = "auto_scaler_profile.expander must be least-waste, priority, most-pods or random."
   }
 }
+
+# =============================================================================
+# Security
+# =============================================================================
+
+variable "oidc_issuer_enabled" {
+  description = "Expose an OIDC issuer for the cluster (required by Workload Identity). Cannot be disabled once enabled."
+  type        = bool
+  default     = true
+}
+
+variable "workload_identity_enabled" {
+  description = "Enable Microsoft Entra Workload ID so pods authenticate to Azure (Key Vault, Storage, ...) with federated managed identities instead of secrets."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = !var.workload_identity_enabled || var.oidc_issuer_enabled
+    error_message = "workload_identity_enabled requires oidc_issuer_enabled = true."
+  }
+}
+
+variable "azure_policy_enabled" {
+  description = "Install the Azure Policy add-on (Gatekeeper) to audit/enforce policy assignments on the cluster. Requires the Microsoft.PolicyInsights resource provider."
+  type        = bool
+  default     = true
+}
+
+variable "key_vault_secrets_provider" {
+  description = "Azure Key Vault Secrets Store CSI driver add-on: mounts Key Vault secrets/certificates into pods (authorise it with Workload Identity or the add-on identity exposed in outputs)."
+  type = object({
+    enabled                  = optional(bool, true)
+    secret_rotation_enabled  = optional(bool, true)
+    secret_rotation_interval = optional(string, "2m")
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = can(regex("^[0-9]+(s|m|h)$", var.key_vault_secrets_provider.secret_rotation_interval))
+    error_message = "key_vault_secrets_provider.secret_rotation_interval must be a duration such as 2m, 30s or 1h."
+  }
+}
+
+variable "key_management_service" {
+  description = "Optional KMS etcd encryption of Kubernetes secrets with a Key Vault key. Requires identity_type = UserAssigned and, BEFORE the cluster is created, the control plane identity must hold \"Key Vault Crypto User\" on the key (bring the identity through user_assigned_identity). key_vault_id is required for a versionless key (automatic rotation) or a private vault."
+  type = object({
+    key_vault_key_id         = string
+    key_vault_network_access = optional(string, "Public")
+    key_vault_id             = optional(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.key_management_service == null || var.identity_type == "UserAssigned"
+    error_message = "key_management_service requires identity_type = \"UserAssigned\"."
+  }
+
+  validation {
+    condition = var.key_management_service == null ? true : (
+      can(regex("^https://[^/]+/keys/[^/]+(/[^/]+)?$", var.key_management_service.key_vault_key_id)) &&
+      contains(["Public", "Private"], var.key_management_service.key_vault_network_access)
+    )
+    error_message = "key_management_service.key_vault_key_id must be a Key Vault key URI (https://<vault>.vault.azure.net/keys/<name>[/<version>]) and key_vault_network_access Public or Private."
+  }
+
+  validation {
+    condition = var.key_management_service == null ? true : (
+      var.key_management_service.key_vault_id != null || (
+        var.key_management_service.key_vault_network_access == "Public" &&
+        can(regex("^https://[^/]+/keys/[^/]+/[^/]+$", var.key_management_service.key_vault_key_id))
+      )
+    )
+    error_message = "key_management_service.key_vault_id is required with a versionless key ID or key_vault_network_access = \"Private\"."
+  }
+}
+
+variable "disk_encryption_set_id" {
+  description = "Optional Disk Encryption Set (customer-managed keys) for node OS and data disks. Forces a new cluster when changed."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.disk_encryption_set_id == null || can(regex("(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Compute/diskEncryptionSets/[^/]+$", var.disk_encryption_set_id))
+    error_message = "disk_encryption_set_id must be the resource ID of a disk encryption set."
+  }
+}
+
+variable "image_cleaner_enabled" {
+  description = "Run Image Cleaner (Eraser) to remove unused, potentially vulnerable images from nodes."
+  type        = bool
+  default     = true
+}
+
+variable "image_cleaner_interval_hours" {
+  description = "Image Cleaner scan interval in hours (24-2160)."
+  type        = number
+  default     = 168
+
+  validation {
+    condition     = var.image_cleaner_interval_hours >= 24 && var.image_cleaner_interval_hours <= 2160
+    error_message = "image_cleaner_interval_hours must be between 24 and 2160."
+  }
+}
+
+variable "microsoft_defender_enabled" {
+  description = "Enable the Microsoft Defender for Containers sensor (runtime threat detection; billed by Defender for Cloud). Sends its data to monitoring.log_analytics_workspace_id."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.microsoft_defender_enabled || var.monitoring != null
+    error_message = "microsoft_defender_enabled requires monitoring.log_analytics_workspace_id."
+  }
+}
+
+variable "container_registry_ids" {
+  description = "Azure Container Registries (static key => registry ID) the kubelet identity may pull from (AcrPull role). Keys must be static strings so registries created in the same apply are supported."
+  type        = map(string)
+  default     = {}
+}
+
+# =============================================================================
+# Observability
+# =============================================================================
+
+variable "monitoring" {
+  description = <<-EOT
+    Azure Monitor integration. Null disables it. log_analytics_workspace_id is required.
+    - container_insights_enabled: Container Insights agent with managed identity authentication,
+      wired through a data collection rule (DCR) and its association to the cluster.
+    - container_insights_streams / data_collection_interval / namespace_filtering_mode (Off | Include | Exclude)
+      / namespaces: Container Insights collection scope (cost control).
+    - diagnostic_settings_enabled: control plane logs (resource-specific tables) and metrics to the workspace;
+      diagnostic_log_categories selects the log categories (kube-audit is very verbose: prefer kube-audit-admin).
+  EOT
+  type = object({
+    log_analytics_workspace_id = string
+    container_insights_enabled = optional(bool, true)
+    container_insights_streams = optional(list(string), [
+      "Microsoft-ContainerLog",
+      "Microsoft-ContainerLogV2",
+      "Microsoft-KubeEvents",
+      "Microsoft-KubePodInventory",
+      "Microsoft-KubeNodeInventory",
+      "Microsoft-KubePVInventory",
+      "Microsoft-KubeServices",
+      "Microsoft-KubeMonAgentEvents",
+      "Microsoft-InsightsMetrics",
+      "Microsoft-ContainerInventory",
+      "Microsoft-ContainerNodeInventory",
+      "Microsoft-Perf",
+    ])
+    data_collection_interval    = optional(string, "1m")
+    namespace_filtering_mode    = optional(string, "Off")
+    namespaces                  = optional(list(string), [])
+    diagnostic_settings_enabled = optional(bool, true)
+    diagnostic_log_categories = optional(list(string), [
+      "kube-apiserver",
+      "kube-audit-admin",
+      "kube-controller-manager",
+      "kube-scheduler",
+      "cluster-autoscaler",
+      "guard",
+    ])
+    diagnostic_metrics_enabled = optional(bool, true)
+  })
+  default = null
+
+  validation {
+    condition     = var.monitoring == null ? true : can(regex("(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.OperationalInsights/workspaces/[^/]+$", var.monitoring.log_analytics_workspace_id))
+    error_message = "monitoring.log_analytics_workspace_id must be the resource ID of a Log Analytics workspace."
+  }
+
+  validation {
+    condition     = var.monitoring == null ? true : can(regex("^([1-9]|[12][0-9]|30)m$", var.monitoring.data_collection_interval))
+    error_message = "monitoring.data_collection_interval must be between 1m and 30m."
+  }
+
+  validation {
+    condition = var.monitoring == null ? true : (
+      contains(["Off", "Include", "Exclude"], var.monitoring.namespace_filtering_mode) &&
+      (var.monitoring.namespace_filtering_mode == "Off" || length(var.monitoring.namespaces) > 0)
+    )
+    error_message = "monitoring.namespace_filtering_mode must be Off, Include or Exclude; Include/Exclude need a non-empty namespaces list."
+  }
+
+  validation {
+    condition = var.monitoring == null ? true : alltrue([
+      for c in var.monitoring.diagnostic_log_categories : contains([
+        "kube-apiserver", "kube-audit", "kube-audit-admin", "kube-controller-manager", "kube-scheduler",
+        "cluster-autoscaler", "cloud-controller-manager", "guard", "csi-azuredisk-controller",
+        "csi-azurefile-controller", "csi-snapshot-controller",
+      ], c)
+    ])
+    error_message = "monitoring.diagnostic_log_categories contains an unknown AKS log category."
+  }
+
+  validation {
+    condition     = var.monitoring == null ? true : !var.monitoring.container_insights_enabled || length(var.monitoring.container_insights_streams) > 0
+    error_message = "monitoring.container_insights_streams cannot be empty when Container Insights is enabled."
+  }
+}

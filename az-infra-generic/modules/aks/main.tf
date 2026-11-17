@@ -208,6 +208,55 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
+  # --- Workload security -------------------------------------------------------------
+  oidc_issuer_enabled          = var.oidc_issuer_enabled
+  workload_identity_enabled    = var.workload_identity_enabled
+  azure_policy_enabled         = var.azure_policy_enabled
+  image_cleaner_enabled        = var.image_cleaner_enabled
+  image_cleaner_interval_hours = var.image_cleaner_enabled ? var.image_cleaner_interval_hours : null
+  disk_encryption_set_id       = var.disk_encryption_set_id
+
+  dynamic "key_vault_secrets_provider" {
+    for_each = var.key_vault_secrets_provider.enabled ? [var.key_vault_secrets_provider] : []
+    iterator = kv
+
+    content {
+      secret_rotation_enabled  = kv.value.secret_rotation_enabled
+      secret_rotation_interval = kv.value.secret_rotation_enabled ? kv.value.secret_rotation_interval : null
+    }
+  }
+
+  dynamic "key_management_service" {
+    for_each = var.key_management_service == null ? [] : [var.key_management_service]
+    iterator = kms
+
+    content {
+      key_vault_key_id         = kms.value.key_vault_key_id
+      key_vault_network_access = kms.value.key_vault_network_access
+      key_vault_id             = kms.value.key_vault_id
+    }
+  }
+
+  dynamic "microsoft_defender" {
+    for_each = var.microsoft_defender_enabled ? [1] : []
+
+    content {
+      log_analytics_workspace_id = var.monitoring.log_analytics_workspace_id
+    }
+  }
+
+  # --- Observability -------------------------------------------------------------------
+  # Container Insights with managed identity authentication. The data
+  # collection rule and its association are declared in monitoring.tf.
+  dynamic "oms_agent" {
+    for_each = local.container_insights_enabled ? [1] : []
+
+    content {
+      log_analytics_workspace_id      = var.monitoring.log_analytics_workspace_id
+      msi_auth_for_monitoring_enabled = true
+    }
+  }
+
   # With a user-assigned identity, subnet permissions must exist before the
   # cluster creates its load balancer / egress resources in the subnet.
   depends_on = [azurerm_role_assignment.network_contributor]

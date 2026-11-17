@@ -40,6 +40,11 @@ locals {
     })
   }
 
+  # --- Observability ----------------------------------------------------------------
+  # Decided from static flags only (never from IDs that may be unknown at plan).
+  container_insights_enabled  = var.monitoring != null && try(var.monitoring.container_insights_enabled, false)
+  diagnostic_settings_enabled = var.monitoring != null && try(var.monitoring.diagnostic_settings_enabled, false)
+
   # --- Control plane identity ---------------------------------------------------
   create_cluster_identity = var.identity_type == "UserAssigned" && var.user_assigned_identity == null
 
