@@ -31,6 +31,32 @@ resource "azurerm_role_assignment" "network_contributor" {
 }
 
 # =============================================================================
+# Kubernetes access (Azure RBAC for Kubernetes authorization)
+# =============================================================================
+
+resource "azurerm_role_assignment" "cluster_admin" {
+  for_each = var.cluster_admin_principal_ids
+
+  scope                = azurerm_kubernetes_cluster.this.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = each.value
+  description          = "AKS ${var.name}: Kubernetes cluster-admin through Azure RBAC ('${each.key}')."
+}
+
+# Local accounts are disabled by default: without an admin group or an Azure
+# RBAC assignment, nobody can use kubectl after the deployment.
+check "cluster_admin_access" {
+  assert {
+    condition = (
+      !var.local_account_disabled ||
+      length(try(var.entra_id_rbac.admin_group_object_ids, [])) > 0 ||
+      length(var.cluster_admin_principal_ids) > 0
+    )
+    error_message = "No cluster administrator is configured while local accounts are disabled: set entra_id_rbac.admin_group_object_ids or cluster_admin_principal_ids, or grant \"Azure Kubernetes Service RBAC Cluster Admin\" on the cluster outside this module."
+  }
+}
+
+# =============================================================================
 # Kubelet identity
 #
 # Created by AKS in the node resource group; used by nodes to pull images.

@@ -45,6 +45,15 @@ locals {
   container_insights_enabled  = var.monitoring != null && try(var.monitoring.container_insights_enabled, false)
   diagnostic_settings_enabled = var.monitoring != null && try(var.monitoring.diagnostic_settings_enabled, false)
 
+  # --- API server endpoint ------------------------------------------------------------
+  # Private clusters: the private FQDN (falls back to the public FQDN when
+  # private_dns_zone_id = "None" and only the public record exists).
+  api_server_fqdn = (
+    var.private_cluster_enabled ?
+    try(coalesce(azurerm_kubernetes_cluster.this.private_fqdn, azurerm_kubernetes_cluster.this.fqdn), null) :
+    azurerm_kubernetes_cluster.this.fqdn
+  )
+
   # --- Control plane identity ---------------------------------------------------
   create_cluster_identity = var.identity_type == "UserAssigned" && var.user_assigned_identity == null
 

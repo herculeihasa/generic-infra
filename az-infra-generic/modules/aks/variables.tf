@@ -248,6 +248,17 @@ variable "entra_id_rbac" {
   }
 }
 
+variable "cluster_admin_principal_ids" {
+  description = "Entra ID principals (static key => object ID of a user, group or service principal) granted \"Azure Kubernetes Service RBAC Cluster Admin\" on the cluster. Requires entra_id_rbac.azure_rbac_enabled. Prefer groups; for a first deployment, the deploying principal avoids being locked out."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = length(var.cluster_admin_principal_ids) == 0 || try(var.entra_id_rbac.azure_rbac_enabled, false)
+    error_message = "cluster_admin_principal_ids requires entra_id_rbac.azure_rbac_enabled = true."
+  }
+}
+
 variable "local_account_disabled" {
   description = "Disable the static local admin kubeconfig so every access goes through Microsoft Entra ID (recommended). Requires entra_id_rbac."
   type        = bool
