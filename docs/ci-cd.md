@@ -183,7 +183,52 @@ only lets plan/apply run when the repository variable
 summary, that no Azure stage was executed. Nothing is ever reported as
 deployed without an actual apply.
 
-## 9. Status
+## 9. tp-local pipeline and the self-hosted WSL runner
+
+Workflow: [`.github/workflows/tp-local.yml`](../.github/workflows/tp-local.yml).
+
+| Part | Runner | When |
+|---|---|---|
+| Stages 1-3 (validation, lint, script tests, security) | GitHub-hosted | Every PR / push touching tp-local or shared CI |
+| Readiness decision | GitHub-hosted | Always; explains in the summary why local stages did or did not run |
+| Preflight, plan, approval, apply, integration tests | **Self-hosted, in WSL** (`[self-hosted, linux, wsl, microk8s]`) | Only `workflow_dispatch` from `main` with `local-deploy: true`, and only if `TP_LOCAL_RUNNER_ENABLED=true` |
+
+A GitHub-hosted runner never targets the local cluster: it cannot reach it,
+and the local state lives on the WSL machine.
+
+### Setting up the self-hosted runner (WSL Ubuntu)
+
+Prerequisites: the tp-local WSL setup is done (`prepare-wsl.sh`), the
+cluster was bootstrapped once **interactively** (first install needs
+`sudo`), and the runner user is the cluster owner (member of the
+`microk8s` group, same `$HOME`, so it shares
+`~/.local/state/tp-local` and `~/.kube/tp-local-microk8s.yaml`).
+
+```bash
+# WSL Ubuntu, as the cluster owner (not root)
+mkdir -p ~/actions-runner && cd ~/actions-runner
+# Download the Linux x64 runner package shown in GitHub:
+#   Settings > Actions > Runners > New self-hosted runner (verify its SHA-256)
+./config.sh --url https://github.com/<owner>/<repository> --token <registration-token> \
+  --name wsl-tp-local --labels wsl,microk8s --unattended
+sudo ./svc.sh install "$USER" && sudo ./svc.sh start   # systemd service, runs as $USER
+```
+
+Then set the repository variable `TP_LOCAL_RUNNER_ENABLED=true`.
+
+**Runner security rules:**
+
+* Use it with a **private repository** only: workflows from pull requests
+  could otherwise target the runner and execute code on your machine.
+* Jobs on the runner only run on `workflow_dispatch` from `main`
+  (enforced in the workflow and by `ci/tests/test_workflows.py`).
+* Do not grant the runner user passwordless sudo: steps needing root
+  (first install, channel change, uninstall) stay interactive and fail with
+  an explicit "run sudo -v" message in CI.
+* The machine must be on (and WSL running) for the job to start; queued jobs
+  expire after 24 hours.
+
+## 10. Status
 
 The pipeline definitions are implemented incrementally; see the following
 sections of this document as they are added.

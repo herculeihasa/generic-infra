@@ -1,0 +1,104 @@
+# Pipeline of the tp-local project (MicroK8s in WSL).
+#
+# Hosted runners run stages 1-3 only: they cannot reach a cluster on a
+# laptop, and the local state lives on that machine. Everything touching the
+# cluster runs on the self-hosted runner installed in the WSL distribution,
+# ONLY on a manual dispatch from main, and only when the repository variable
+# TP_LOCAL_RUNNER_ENABLED is "true" (see docs/ci-cd.md).
+name: tp-local
+
+on:
+  pull_request:
+    paths:
+      - "tp-local/**"
+      - "ci/**"
+      - ".github/workflows/_terraform-*.yml"
+      - ".github/workflows/tp-local.yml"
+      - ".gitleaks.toml"
+      - ".checkov.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "tp-local/**"
+      - "ci/**"
+      - ".github/workflows/_terraform-*.yml"
+      - ".github/workflows/tp-local.yml"
+      - ".gitleaks.toml"
+      - ".checkov.yaml"
+  workflow_dispatch:
+    inputs:
+      local-deploy:
+        description: Run the local stages on the self-hosted WSL runner (plan, approval, apply, integration tests)
+        type: boolean
+        default: false
+      allow-destroy:
+        description: Authorize applying a plan that deletes or replaces resources
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tp-local-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    name: quality
+    uses: ./.github/workflows/_terraform-quality.yml
+    with:
+      project: tp-local
+      caller-workflow: .github/workflows/tp-local.yml
+
+  local-readiness:
+    name: "4 · local runner readiness"
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Should the self-hosted WSL stages run?
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          LOCAL_DEPLOY: ${{ inputs.local-deploy }}
+          RUNNER_ENABLED: ${{ vars.TP_LOCAL_RUNNER_ENABLED }}
+        run: |
+          reason=""
+          [[ "$EVENT_NAME" == "workflow_dispatch" ]] || reason="local stages only run on a manual dispatch"
+          [[ -z "$reason" && "$REF" != "refs/heads/main" ]] && reason="local stages only run from main"
+          [[ -z "$reason" && "${LOCAL_DEPLOY:-false}" != "true" ]] && reason="local-deploy input not selected"
+          [[ -z "$reason" && "${RUNNER_ENABLED:-}" != "true" ]] && reason="repository variable TP_LOCAL_RUNNER_ENABLED is not true (no self-hosted WSL runner registered)"
+          if [[ -z "$reason" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Local stages enabled: they run on the self-hosted WSL runner." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Local stages skipped::${reason}"
+            {
+              echo "### Local stages not run"
+              echo "Validation and security gates ran on a hosted runner. Nothing was planned or applied on the"
+              echo "local cluster: ${reason}."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  local-preflight:
+    name: "4 · WSL host preflight (self-hosted)"
+    needs: local-readiness
+    # Defence in depth: never reachable from a pull request or another branch.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.local-readiness.outputs.enabled == 'true'
+    runs-on: [self-hosted, linux, wsl, microk8s]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Host prerequisites (systemd, snapd, resources)
+        run: bash tp-local/modules/microk8s/scripts/preflight.sh
+      - name: Toolchain
+        run: |
+          terraform version
+          microk8s version || echo "MicroK8s not installed yet: the bootstrap stage installs it (needs interactive sudo the first time)."
