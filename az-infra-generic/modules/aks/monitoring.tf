@@ -11,9 +11,10 @@ resource "azurerm_monitor_data_collection_rule" "container_insights" {
   count = local.container_insights_enabled ? 1 : 0
 
   # "MSCI-<region>-<cluster>" is the naming used by the Azure CLI and portal.
-  name                = substr("MSCI-${var.location}-${var.name}", 0, 64)
+  # The rule lives in the region of its destination workspace.
+  name                = substr("MSCI-${local.data_collection_rule_location}-${var.name}", 0, 64)
   resource_group_name = var.resource_group_name
-  location            = var.location
+  location            = local.data_collection_rule_location
   description         = "Container Insights data collection for AKS cluster ${var.name}."
   tags                = local.tags
 

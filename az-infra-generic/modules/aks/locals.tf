@@ -45,6 +45,8 @@ locals {
   container_insights_enabled  = var.monitoring != null && try(var.monitoring.container_insights_enabled, false)
   diagnostic_settings_enabled = var.monitoring != null && try(var.monitoring.diagnostic_settings_enabled, false)
 
+  data_collection_rule_location = coalesce(try(var.monitoring.data_collection_rule_location, null), var.location)
+
   # --- API server endpoint ------------------------------------------------------------
   # Private clusters: the private FQDN (falls back to the public FQDN when
   # private_dns_zone_id = "None" and only the public record exists).

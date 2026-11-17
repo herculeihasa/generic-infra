@@ -834,6 +834,8 @@ variable "monitoring" {
       wired through a data collection rule (DCR) and its association to the cluster.
     - container_insights_streams / data_collection_interval / namespace_filtering_mode (Off | Include | Exclude)
       / namespaces: Container Insights collection scope (cost control).
+    - data_collection_rule_location: region of the Container Insights data collection rule; it must be the
+      region of the Log Analytics workspace (defaults to the cluster region).
     - diagnostic_settings_enabled: control plane logs (resource-specific tables) and metrics to the workspace;
       diagnostic_log_categories selects the log categories (kube-audit is very verbose: prefer kube-audit-admin).
   EOT
@@ -854,10 +856,11 @@ variable "monitoring" {
       "Microsoft-ContainerNodeInventory",
       "Microsoft-Perf",
     ])
-    data_collection_interval    = optional(string, "1m")
-    namespace_filtering_mode    = optional(string, "Off")
-    namespaces                  = optional(list(string), [])
-    diagnostic_settings_enabled = optional(bool, true)
+    data_collection_rule_location = optional(string)
+    data_collection_interval      = optional(string, "1m")
+    namespace_filtering_mode      = optional(string, "Off")
+    namespaces                    = optional(list(string), [])
+    diagnostic_settings_enabled   = optional(bool, true)
     diagnostic_log_categories = optional(list(string), [
       "kube-apiserver",
       "kube-audit-admin",

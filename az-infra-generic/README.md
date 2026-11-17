@@ -491,7 +491,7 @@ system pool), `zones` (`["1","2","3"]`), `auto_scaling_enabled` (`true`),
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `monitoring` | object | `null` (off) | `log_analytics_workspace_id` (required), `container_insights_enabled` (`true`), `container_insights_streams`, `data_collection_interval` (`1m`), `namespace_filtering_mode` (`Off`), `namespaces`, `diagnostic_settings_enabled` (`true`), `diagnostic_log_categories` (apiserver, audit-admin, controller-manager, scheduler, autoscaler, guard), `diagnostic_metrics_enabled` (`true`). |
+| `monitoring` | object | `null` (off) | `log_analytics_workspace_id` (required), `container_insights_enabled` (`true`), `container_insights_streams`, `data_collection_rule_location` (workspace region, defaults to the cluster region), `data_collection_interval` (`1m`), `namespace_filtering_mode` (`Off`), `namespaces`, `diagnostic_settings_enabled` (`true`), `diagnostic_log_categories` (apiserver, audit-admin, controller-manager, scheduler, autoscaler, guard), `diagnostic_metrics_enabled` (`true`). |
 
 ### Outputs
 
