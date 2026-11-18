@@ -43,3 +43,61 @@ repos:
       - id: check-executables-have-shebangs
       - id: check-shebang-scripts-are-executable
       - id: detect-private-key
+
+  # ---------------------------------------------------------------------------
+  # Terraform: formatting and static checks (commit), init + validate and
+  # TFLint (push), terraform test (manual). The push/manual hooks run the CI
+  # scripts on the affected roots only (ci.py change detection); none needs
+  # Azure credentials, a backend or a cluster.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: terraform-fmt
+        name: terraform fmt (files are rewritten, re-stage them)
+        entry: terraform fmt
+        language: system
+        files: \.(tf|tfvars|tftest\.hcl)$
+
+      - id: azure-config
+        name: Azure provider/backend static checks (ci.py azure-config)
+        entry: python ci/scripts/ci.py azure-config az-infra-generic
+        language: python
+        files: ^(az-infra-generic/.*\.(tf|hcl)|ci/scripts/ci\.py|ci/projects/az-infra-generic\.json)$
+        pass_filenames: false
+
+      - id: terraform-validate
+        name: terraform init + validate (affected roots)
+        entry: ci/scripts/pre-commit-hook.sh validate
+        language: script
+        files: ^(az-infra-generic|tp-local|ci)/
+        exclude: \.md$
+        require_serial: true
+        stages: [pre-push, manual]
+
+      - id: tflint
+        name: TFLint (affected projects)
+        entry: ci/scripts/pre-commit-hook.sh tflint
+        language: script
+        files: ^(az-infra-generic|tp-local|ci)/
+        exclude: \.md$
+        require_serial: true
+        verbose: true
+        stages: [pre-push, manual]
+
+      - id: terraform-test
+        name: terraform test, mocked providers (affected roots)
+        entry: ci/scripts/pre-commit-hook.sh test
+        language: script
+        files: ^(az-infra-generic|tp-local|ci)/
+        exclude: \.md$
+        require_serial: true
+        stages: [manual]
+
+  # ---------------------------------------------------------------------------
+  # Shell scripts (same options as ci/scripts/lint.sh: severity >= warning)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning, --external-sources]

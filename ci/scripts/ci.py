@@ -100,7 +100,12 @@ def cmd_manifest(args: argparse.Namespace) -> int:
 
 def cmd_changes(args: argparse.Namespace) -> int:
     manifest = load_manifest(args.project)
-    if args.all or is_null_sha(args.base) or is_null_sha(args.head):
+    if args.all:
+        roots, reason = manifest["roots"], "full validation requested"
+    elif args.files is not None:
+        # Explicit file list (pre-commit hooks pass the staged or pushed files).
+        roots, reason = select_roots(manifest, [f.replace("\\", "/") for f in args.files], args.workflow_file)
+    elif is_null_sha(args.base) or is_null_sha(args.head):
         roots, reason = manifest["roots"], "full validation requested"
     else:
         roots, reason = select_roots(manifest, changed_files(args.base, args.head), args.workflow_file)
@@ -351,6 +356,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base")
     p.add_argument("--head")
     p.add_argument("--all", action="store_true", help="select every root")
+    p.add_argument("--files", nargs="*", help="changed files (repository-relative) instead of --base/--head")
     p.add_argument("--workflow-file", help="project caller workflow (its change re-validates everything)")
     p.set_defaults(func=cmd_changes)
 
