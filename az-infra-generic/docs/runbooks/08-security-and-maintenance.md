@@ -178,6 +178,7 @@ well before the current minor leaves support.
 | Monthly | Check Kubernetes version support and AKS upgrade notifications | SEC-10 |
 | Quarterly | Access review; state security check | SEC-08, SEC-07 |
 | Quarterly | Update pinned CI tools (version + SHA-256 in `ci/tool-versions.env`) | [docs/ci-cd.md](../../../docs/ci-cd.md) |
+| Quarterly | Update the pre-commit hook versions (Gitleaks/actionlint together with the CI tools) | [pre-commit guide §10](../../../docs/pre-commit.md#10-maintenance) |
 | Before 2027-03-31 | Re-review expiring Trivy acceptances | SEC-06 |
 | Yearly | Recovery drill: restore a state version in a test container; rebuild dev | [03 BS-08](03-backend-and-state-management.md#bs-08-restore-a-previous-state-version), 07 R-05 |
 

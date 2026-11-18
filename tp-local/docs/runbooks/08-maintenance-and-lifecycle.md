@@ -16,6 +16,7 @@
 | MicroK8s add-ons | Delivered with the MicroK8s snap; selection and arguments in `addons` | MNT-05 |
 | Helm charts | `version` of each `helm_releases` entry (`podinfo` 6.17.0) | MNT-06 |
 | Ubuntu packages | `apt` (Terraform held by `apt-mark hold`) | `sudo apt update && sudo apt upgrade` |
+| pre-commit hooks | `.pre-commit-config.yaml` (tags), `PRE_COMMIT_VERSION` in `ci/tool-versions.env` | [pre-commit guide §10](../../../docs/pre-commit.md#10-maintenance) |
 
 ## 2. Maintenance calendar
 

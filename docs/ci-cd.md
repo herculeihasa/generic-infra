@@ -32,7 +32,8 @@ repository moved to Azure Repos.
 ├── tp-local.yml              caller: triggers + WSL self-hosted jobs
 ├── _terraform-quality.yml    reusable: stages 1-3 (validation, lint, security)
 ├── _terraform-plan.yml       reusable: stage 4 (plan, destructive-change report)
-└── _terraform-apply.yml      reusable: stage 5 (approved apply of the saved plan)
+├── _terraform-apply.yml      reusable: stage 5 (approved apply of the saved plan)
+└── pre-commit.yml            repository-wide: commit-stage pre-commit hooks on every file
 ci/
 ├── tool-versions.env         pinned tool versions + SHA-256
 ├── projects/<project>.json   per-project manifest (roots, compat checks, script tests, deployments)
@@ -41,6 +42,8 @@ ci/
 └── tests/                    unit tests (helpers, plan report, apply guard) + workflow/security policy tests
 .github/dependabot.yml        weekly PRs for action SHA pins and Terraform providers
 .gitleaks.toml  .checkov.yaml  .shellcheckrc        repository-level scanner configuration
+.github/actionlint.yaml       actionlint: labels of the self-hosted runner
+.pre-commit-config.yaml       local hooks (docs/pre-commit.md); .markdownlint-cli2.yaml, .terraform-docs.yml, .editorconfig
 <project>/.tflint.hcl  .checkov.yaml  .checkov-<env>.yaml  .trivyignore.yaml   project-level configuration
 docs/ci-cd.md                 this document
 ```
@@ -58,6 +61,7 @@ docs/ci-cd.md                 this document
 
 | Stage | Gate | Tool | Failure condition | Blocking |
 |---|---|---|---|---|
+| 0 Repository hygiene (`pre-commit` workflow) | Whitespace, line endings, YAML/JSON/TOML, shebangs, private keys, sensitive files, `terraform fmt`, ShellCheck, Markdown lint, documentation consistency, **generated module reference up to date** | pre-commit (`.pre-commit-config.yaml`, commit-stage hooks on every file) | any hook failure or file rewritten by a hook | yes |
 | 1 Source & configuration | Change detection | `ci.py changes` (git diff) | — (selects the Terraform roots to check) | — |
 | | Formatting | `terraform fmt -check -recursive` | any unformatted file | yes |
 | | Initialisation + lock-file consistency | `terraform init -backend=false -lockfile=readonly` | committed lock file missing a provider or inconsistent with the constraints (4-platform `azurerm` coverage is checked by the Azure static checks) | yes |
@@ -89,6 +93,12 @@ Gate thresholds are deliberately strict: a finding is either **fixed** or
 | Secrets in Git history | **Gitleaks** | Trivy/Checkov secret scanners disabled | Scans commits, not just the working tree |
 | Misconfiguration, severity-ranked | **Trivy** `config` | — | Built-in severities give a clear HIGH/CRITICAL threshold; covers Terraform and Kubernetes |
 | Compliance & policy-as-code | **Checkov** | — | Largest Azure/Kubernetes policy set, custom YAML policies, scans GitHub Actions workflows and **Terraform plan JSON** |
+
+The local pre-commit hooks ([`docs/pre-commit.md`](pre-commit.md)) run the
+same tools and configuration before a commit or push; the heavy ones call the
+same `ci/scripts`. They are a convenience, not a gate: CI repeats every check.
+The `pre-commit` workflow skips Gitleaks and actionlint, which the project
+pipelines already run.
 
 Trivy and Checkov overlap on Terraform misconfiguration. Both are kept, with
 distinct roles: Trivy is the **severity gate** (open-source Checkov has no
@@ -314,13 +324,15 @@ python3 -m unittest discover -s ci/tests
 ```
 
 `run-local.sh` runs the same scripts as CI; gates whose tool is missing are
-shown as SKIPPED (they still run in CI).
+shown as SKIPPED (they still run in CI). The pre-commit hooks run the
+commit-stage checks automatically, and the full set on demand:
+`pre-commit run --hook-stage manual --all-files` ([`docs/pre-commit.md`](pre-commit.md)).
 
 ### Recommended branch protection for `main`
 
 Require a pull request with at least one approval, require the status checks
-`az-infra-generic / quality / quality gate`, `tp-local / quality / quality gate`
-and `az-infra-generic / 2 · Azure provider & backend checks`, dismiss stale
+`az-infra-generic / quality / quality gate`, `tp-local / quality / quality gate`, `az-infra-generic / 2 · Azure provider & backend checks` and
+`pre-commit / hygiene, formatting, docs, lint (pre-commit)`, dismiss stale
 approvals, block force pushes. Add a CODEOWNERS file so that changes to
 `ci/`, `.github/`, `.checkov*.yaml` and `.trivyignore.yaml` (the security
 policy itself) require the platform owner's review.
@@ -330,6 +342,7 @@ policy itself) require the platform owner's review.
 | Symptom | Cause / fix |
 |---|---|
 | `terraform fmt` gate fails | Run `terraform fmt -recursive <project>` and commit |
+| `pre-commit` job: `files were modified by this hook` | A fixer or terraform-docs changed a file (e.g. a module README reference out of date): run `pre-commit run --all-files` locally and commit the result |
 | `init failed … lock file inconsistent` | Provider constraint changed without updating the lock: `terraform init -upgrade -backend=false` then `terraform providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64` |
 | Minimum-version job fails, latest passes | A feature newer than `TERRAFORM_MIN_VERSION` is used: raise the module `required_version` (and `TERRAFORM_MIN_VERSION`) or avoid the feature |
 | TFLint/ShellCheck/actionlint finding | Fix it; for an intentional exception use the tool's inline ignore with a comment explaining why |
@@ -353,6 +366,7 @@ policy itself) require the platform owner's review.
 |---|---|
 | Workflows, scripts, policies, configuration | Implemented |
 | Validated locally | Python suites (helpers, plan report incl. a real Terraform plan, apply guard, workflow and security policy tests); every Terraform gate of both projects through `run-local.sh`; plan + guard end to end on `tp-local/bootstrap`; script behaviour suites |
-| Not executable here (no tool / access) | TFLint, ShellCheck, actionlint, Gitleaks, Trivy, Checkov, the minimum-version job: their **first GitHub Actions run** is their first execution and establishes the findings baseline (fix or explicitly accept, §5) |
+| Run locally (WSL, pinned versions) | TFLint, Gitleaks, Trivy, Checkov, actionlint and every pre-commit hook. Open findings: Checkov `CKV_AZURE_232`, `CKV_AZURE_172`, `CKV2_AZURE_31` (az-infra-generic) and `CKV2_AZINFRA_4` (tp-local service accounts) |
+| Not run yet | The workflows themselves on GitHub, including the `pre-commit` workflow and the minimum-version job |
 | Pending Azure access | Azure identities, GitHub environments, `AZURE_DEPLOYMENT_ENABLED`; no Azure plan or apply has ever run |
 | Pending WSL runner | Self-hosted runner registration, `TP_LOCAL_RUNNER_ENABLED`; no local deployment has run through CI |

@@ -315,3 +315,6 @@ Workflow `.github/workflows/tp-local.yml`, documented in
   and stay interactive (`sudo -v` then `terraform apply` in WSL).
 
 Run the same gates locally: `ci/scripts/run-local.sh tp-local` (repository root).
+Commits and pushes made from WSL also run the repository's pre-commit hooks
+(formatting, ShellCheck, secrets, Markdown, module references; `validate` and
+TFLint on push): see [`docs/pre-commit.md`](../docs/pre-commit.md).

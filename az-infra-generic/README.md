@@ -455,6 +455,8 @@ changes.
 ## 9. AKS module inputs and outputs
 
 Module path: `modules/aks`. All inputs except the first three are optional.
+This section groups and explains them; the complete list generated from the
+code is in the [module reference](modules/aks/README.md#reference-generated).
 
 ### Inputs
 
@@ -761,6 +763,14 @@ Results at the time of writing (Terraform 1.17.2, azurerm 5.14.0):
 Each suite asserts on planned values and has negative tests (`expect_failures`)
 for every validation rule. A deliberately wrong assertion fails, and an
 assertion on a value unknown at plan time errors instead of passing.
+
+### Pre-commit hooks
+
+The repository's pre-commit hooks ([`docs/pre-commit.md`](../docs/pre-commit.md))
+run the fast checks above at each commit (formatting, `ci.py azure-config`,
+Markdown, generated module references, secrets), `init` + `validate` and
+TFLint on the affected roots at each push, and everything, tests and
+scanners included, with `pre-commit run --hook-stage manual --all-files`.
 
 ### Static analysis and security scanning (CI pipeline)
 

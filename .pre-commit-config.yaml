@@ -25,24 +25,38 @@ repos:
   # ---------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
+    # Some of these hooks declare pre-push in their own manifest: keep them at
+    # commit time only (the push stage is for the Terraform checks).
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        stages: [pre-commit, manual]
       - id: end-of-file-fixer
+        stages: [pre-commit, manual]
       - id: mixed-line-ending
         # LF everywhere (.gitattributes); PowerShell scripts are CRLF on purpose.
         args: [--fix=lf]
         exclude: \.ps1$
+        stages: [pre-commit, manual]
       - id: check-merge-conflict
+        stages: [pre-commit, manual]
       - id: check-added-large-files
         args: [--maxkb=500]
+        stages: [pre-commit, manual]
       - id: check-case-conflict
+        stages: [pre-commit, manual]
       - id: check-yaml
+        stages: [pre-commit, manual]
       - id: check-json
+        stages: [pre-commit, manual]
       - id: check-toml
+        stages: [pre-commit, manual]
       - id: check-executables-have-shebangs
+        stages: [pre-commit, manual]
       - id: check-shebang-scripts-are-executable
+        stages: [pre-commit, manual]
       - id: detect-private-key
+        stages: [pre-commit, manual]
 
   # ---------------------------------------------------------------------------
   # Secrets and sensitive files (commit). Gitleaks scans the staged changes

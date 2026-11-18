@@ -77,6 +77,13 @@ Cloning inside the Linux filesystem is faster than working on `/mnt/c` or
 `/mnt/e`. A Windows checkout also works: `.gitattributes` keeps LF endings
 and the scripts are always invoked through `bash`.
 
+To contribute changes, install the Git hooks in this clone once
+([pre-commit guide](../../../docs/pre-commit.md), §3):
+
+```bash
+pipx install "pre-commit==4.7.0" && pre-commit install
+```
+
 ## SET-05 Prepare Ubuntu (`prepare-wsl.sh`)
 
 **Status:** Implemented. **Context:** WSL (sudo), repository root.

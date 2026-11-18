@@ -16,6 +16,7 @@
 | Git | any recent | Cloning, change management | Yes |
 | Python 3 | ≥ 3.11 | Local run of the pipeline gates (`ci/scripts/run-local.sh`) | Optional |
 | GitHub CLI (`gh`) | current | Pipeline operations from a terminal ([06 CI/CD operations](06-cicd-operations.md)) | Optional |
+| pre-commit | 4.7.0 (`ci/tool-versions.env`) | Git hooks: formatting, lint, secrets, generated docs ([pre-commit guide](../../../docs/pre-commit.md)) | Recommended for contributors |
 
 The modules accept Terraform `>= 1.9.0, < 2.0.0`; the root configurations
 require `~> 1.17`. Use exactly 1.17.2 to match CI and the lock files.
