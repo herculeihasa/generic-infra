@@ -27,8 +27,8 @@ in CI ([`ci-cd.md`](ci-cd.md)), which stays authoritative.
 | Stage | Trigger | Files checked | Purpose |
 |---|---|---|---|
 | `pre-commit` | `git commit` | staged files | fast checks, offline once the hook environments exist |
-| `pre-push` | `git push` | files changed by the pushed commits | Terraform init + validate, TFLint, CI unit tests on what changed |
-| `manual` | `pre-commit run --hook-stage manual` | the files you pass (`--all-files` for everything) | every hook above plus `terraform test`, Trivy and Checkov |
+| `pre-push` | `git push` | files changed by the pushed commits | Terraform init + validate, TFLint, repository policy checks on what changed |
+| `manual` | `pre-commit run --hook-stage manual` | the files you pass (`--all-files` for everything) | every hook above plus Trivy and Checkov |
 | CI | pull request, push to `main` | everything | all of the above and more (minimum Terraform version, plans, approvals) |
 
 Each hook only runs when files matching its filter are part of the change:
@@ -44,23 +44,23 @@ validate `az-infra-generic`.
 | Scripts | `shellcheck` (ShellCheck 0.11, severity ≥ warning) | commit | no | same options as `ci/scripts/lint.sh` and `.shellcheckrc` |
 | Secrets | `detect-private-key`, `gitleaks` (staged changes, `.gitleaks.toml`) | commit | no | same Gitleaks version as CI |
 | Secrets | `forbid-sensitive-files` | commit | no | state, plans, `.env`, `.terraformrc`, kubeconfigs, keys, secret tfvars, even when force-added |
-| Terraform | `terraform-fmt` | commit | yes | `.tf`, `.tfvars`, `.tftest.hcl` |
+| Terraform | `terraform-fmt` | commit | yes | `.tf`, `.tfvars` |
 | Terraform | `azure-config` (`ci.py azure-config`) | commit | no | no credential in code, backend settings, 4-platform lock files, local bootstrap state |
 | Terraform | `terraform-validate` (init with read-only lock files + validate) | push | no | affected roots only (`ci.py` change detection), `-backend=false` |
 | Terraform | `tflint` | push | no | affected projects; skipped with a warning if TFLint is not installed |
-| Terraform | `terraform-test` (mocked providers) | manual | no | affected roots |
 | Documentation | `terraform-docs` | commit | yes | regenerates the reference block of the module READMEs ([§6](#6-generated-and-hand-written-documentation)) |
 | Documentation | `markdownlint-cli2` (`.markdownlint-cli2.yaml`) | commit | no | |
-| Documentation | `docs-consistency` (`ci/tests/test_docs.py`) | commit | no | relative links and anchors, Mermaid syntax, referenced files and Terraform addresses, runbook structure |
+| Documentation | `docs-consistency` (`ci/scripts/check-repo.py docs`) | commit | no | relative links and anchors, Mermaid syntax, referenced files and Terraform addresses, runbook structure |
 | Workflows | `actionlint` (`.github/actionlint.yaml`) | commit | no | same version as CI |
-| CI helpers | `ci-unit-tests` (`ci/tests`) | push | no | workflow, security-policy, pre-commit and documentation tests |
+| Repository policies | `repo-policy` (`ci/scripts/check-repo.py`) | push | no | workflow hardening, security-tool configuration, pre-commit pins and stages, documentation consistency |
 | Security scans | `trivy`, `checkov` | manual | no | CI configuration; skipped with a warning if the tool is not installed |
 
 **No hook needs Azure credentials, a Terraform backend, a cluster or a
 deployment.** Network access is only needed the first time a hook
 environment is built, and by `terraform init` / `tflint --init` to download
 providers and plugins (then cached). Checks that need real infrastructure
-(plans, applies, integration tests) only run in CI or through the runbooks.
+(plans, applies, post-deployment verification) only run in CI or through the
+runbooks.
 
 Measured on the reference workstation (WSL, repository on `/mnt/d`, warm
 caches): a commit touching one `.tf` and one `.md` file about 35 s, a push
@@ -162,8 +162,8 @@ git push                         # push-stage hooks on the pushed changes
 | Commit-stage hooks on every file | `pre-commit run --all-files` |
 | One hook | `pre-commit run markdownlint-cli2 --all-files` (or `--files a.md b.md`) |
 | Push-stage hooks on your branch | `pre-commit run --hook-stage pre-push --from-ref origin/main --to-ref HEAD` |
-| **Complete local suite** (commit + push + manual hooks) | `pre-commit run --hook-stage manual --all-files` |
-| Terraform tests or scans only | `pre-commit run terraform-test --hook-stage manual --all-files` (`trivy`, `checkov`) |
+| **Every hook** (commit + push + manual hooks) | `pre-commit run --hook-stage manual --all-files` |
+| Scans only | `pre-commit run trivy --hook-stage manual --all-files` (or `checkov`) |
 | Regenerate the Terraform module references | `pre-commit run terraform-docs --all-files` |
 | Check them without writing (terraform-docs on `PATH`) | `ci/scripts/terraform-docs.sh --check` |
 | Same gates as CI, project by project | `ci/scripts/run-local.sh az-infra-generic`, `ci/scripts/run-local.sh tp-local` |
@@ -185,7 +185,7 @@ Rules:
   never writes outside the markers.
 * Every reusable module (a directory `<project>/modules/<name>/` with a
   `versions.tf`) needs a README with exactly one marker pair
-  (`ci/tests/test_precommit.py`).
+  (`ci/scripts/check-repo.py precommit`).
 * Placeholders in descriptions go in backticks (`` `MC_<rg>_<cluster>` ``):
   bare `<rg>` would be rendered as an HTML tag and disappear.
 * The project README §9 (AKS inputs and outputs) is a hand-written, grouped
@@ -206,8 +206,8 @@ would not catch more errors than the structural check plus GitHub's preview.
   fails the job: unformatted files and stale generated documentation cannot
   be merged. Gitleaks and actionlint are skipped there because the project
   pipelines run them.
-* Terraform validation, TFLint, tests and security scans are **not**
-  repeated: the per-project pipelines run them on every change, with the
+* Terraform validation, TFLint, the repository policy checks and security
+  scans are **not** repeated: the per-project pipelines run them on every change, with the
   same `ci/scripts` the push and manual hooks call.
 * Make `pre-commit / hygiene, formatting, docs, lint (pre-commit)` a
   required status check next to the project quality gates
@@ -265,9 +265,9 @@ change, allowlist entry) is in progress. Then:
    `pre-commit run terraform-docs --all-files` and commit any regenerated
    block.
 5. Validate: `pre-commit run --hook-stage manual --all-files` and
-   `python3 -m unittest discover -s ci/tests`.
+   `python3 ci/scripts/check-repo.py`.
 
-**Conventions** (enforced by `ci/tests/test_precommit.py`):
+**Conventions** (enforced by `ci/scripts/check-repo.py precommit`):
 
 * Remote hooks are pinned to a release tag or a commit SHA, extra
   dependencies to an exact version.

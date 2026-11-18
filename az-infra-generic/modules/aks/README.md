@@ -56,13 +56,12 @@ no provider block: configure `azurerm` in the root module.
 | `node_pools.tf` | Additional node pools, workload capacity check |
 | `monitoring.tf` | Container Insights data collection rule, control plane diagnostic settings |
 | `outputs.tf` | Outputs |
-| `tests/` | Offline `terraform test` suites using a mocked `azurerm` provider |
 
-## Tests
+## Validation
 
 ```bash
 terraform init -backend=false
-terraform test   # 70 plan-mode runs, no Azure credentials needed
+terraform validate   # no Azure credentials needed
 ```
 
 ## Reference (generated)

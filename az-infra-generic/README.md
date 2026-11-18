@@ -46,7 +46,7 @@ Design principles:
 * **Secure by default.** Entra ID everywhere: no storage keys, no local Kubernetes accounts, no secret inputs. Managed identities, least-privilege role assignments, Azure Policy, Workload Identity, Key Vault CSI driver.
 * **Generic module, opinionated defaults.** It exposes a curated interface (38 inputs) rather than every provider argument; sensible production defaults; validations that fail fast at plan time.
 * **No hidden drift.** Autoscaled node counts and auto-upgraded versions are left to Azure through Optional+Computed attributes, with no blanket `ignore_changes`.
-* **Testable offline.** `terraform test` suites with a mocked provider run real plans without credentials.
+* **Checked offline.** Formatting, `terraform validate` with read-only lock files, TFLint, Trivy and Checkov run without Azure credentials, locally and in CI.
 
 ## 2. Architecture and directory structure
 
@@ -62,8 +62,7 @@ az-infra-generic/
 │   ├── variables.tf | outputs.tf
 │   ├── main.tf               # resource group + module "state_storage" (modules/storage_account)
 │   ├── moved.tf              # migration of pre-module states to the module addresses
-│   ├── .terraform.lock.hcl
-│   └── tests/bootstrap.tftest.hcl
+│   └── .terraform.lock.hcl
 ├── environments/
 │   ├── dev/                  # implemented
 │   │   ├── backend.tf        # azurerm backend: container tfstate-dev, key, Entra ID auth
@@ -71,8 +70,7 @@ az-infra-generic/
 │   │   ├── versions.tf | providers.tf
 │   │   ├── variables.tf | locals.tf | main.tf | outputs.tf
 │   │   ├── terraform.tfvars  # non-sensitive values only (committed)
-│   │   ├── .terraform.lock.hcl
-│   │   └── tests/dev.tftest.hcl
+│   │   └── .terraform.lock.hcl
 │   ├── rec/  ppr/  prod/     # empty: to be created from dev
 └── modules/
     ├── aks/
@@ -84,16 +82,14 @@ az-infra-generic/
     │   ├── node_pools.tf     # additional node pools + workload capacity check
     │   ├── monitoring.tf     # Container Insights DCR, diagnostic settings
     │   ├── outputs.tf
-    │   ├── README.md
-    │   └── tests/*.tftest.hcl
+    │   └── README.md
     └── storage_account/
         ├── versions.tf       # minimum versions only, no provider block
         ├── variables.tf      # interface + validations
         ├── locals.tf
         ├── main.tf           # account, containers, role assignments, lock
         ├── outputs.tf        # no keys / connection strings
-        ├── README.md         # full module reference
-        └── tests/*.tftest.hcl
+        └── README.md         # full module reference
 ```
 
 Layering and dependencies:
@@ -138,15 +134,13 @@ created from `dev` once its parameters are known.
 ```bash
 cd environments
 cp dev/*.tf dev/terraform.tfvars dev/backend.hcl.example dev/.terraform.lock.hcl rec/
-cp -r dev/tests rec/
 ```
 
 Then in `rec/`:
 
 1. `backend.tf`: set `container_name = "tfstate-rec"` (the key stays the same).
 2. `terraform.tfvars`: `environment = "rec"`, a **non-overlapping** `vnet_address_space` / `aks_nodes_subnet_prefix`, `aks_sku_tier = "Standard"`, real `aks_admin_group_object_ids`, `grant_deployer_cluster_admin = false`, authorized IP ranges or a private cluster.
-3. `tests/dev.tftest.hcl`: rename it and update the expected names.
-4. Generate `backend.hcl` from the bootstrap outputs ([§7](#7-backend-storage-bootstrap-procedure)).
+3. Generate `backend.hcl` from the bootstrap outputs ([§7](#7-backend-storage-bootstrap-procedure)).
 
 For `prod`, also consider a dedicated subscription and its own state storage
 account (run the bootstrap there).
@@ -159,7 +153,7 @@ account (run the bootstrap there).
 | Terraform CLI (AKS module) | `>= 1.9.0, < 2.0.0` | exercised with 1.17.2 only | `modules/aks/versions.tf` (1.9 is the first version supporting validations that reference other variables) |
 | `hashicorp/azurerm` (root configs) | `~> 5.14` | **5.14.0** | `required_providers` + committed `.terraform.lock.hcl` |
 | `hashicorp/azurerm` (AKS module) | `>= 5.14.0, < 6.0.0` | 5.14.0 | `modules/aks/versions.tf` |
-| Terraform CLI (Storage Account module) | `>= 1.9.0, < 2.0.0` | 1.17.2 and 1.9.8 (validate + tests) | `modules/storage_account/versions.tf` |
+| Terraform CLI (Storage Account module) | `>= 1.9.0, < 2.0.0` | 1.17.2 and 1.9.8 (validate) | `modules/storage_account/versions.tf` |
 | `hashicorp/azurerm` (Storage Account module) | `>= 5.14.0, < 6.0.0` | 5.14.0 | `modules/storage_account/versions.tf` |
 
 Version policy:
@@ -173,7 +167,7 @@ Version policy:
   terraform providers lock \
     -platform=windows_amd64 -platform=linux_amd64 \
     -platform=darwin_amd64 -platform=darwin_arm64
-  terraform test
+  terraform validate
   ```
 
 azurerm **5.x** specifics that this code relies on:
@@ -405,8 +399,8 @@ to `module.state_storage.*`, keeping the same keys. On a state created by the
 earlier version, `terraform plan` reports each object as
 `has moved to module.state_storage...` and shows **0 to add, 0 to destroy**,
 with one in-place update: the module's `module = "storage_account"` tag on
-the account. Verified offline by applying the previous configuration with the
-mocked provider and planning the current one against that state.
+the account. This was verified offline during development, against a state
+produced by the previous configuration.
 
 ### Removing the backend
 
@@ -718,9 +712,9 @@ kubectl get nodes -o wide
 ```
 
 Subsequent changes: `terraform plan -out=dev.tfplan`, review, then
-`terraform apply dev.tfplan`. In CI/CD, run `fmt -check`, `validate` and
-`terraform test` on every change, publish the plan for review, and apply the
-**saved** plan only after approval.
+`terraform apply dev.tfplan`. In CI/CD, run `fmt -check`, `validate`, TFLint
+and the security scanners on every change, publish the plan for review, and
+apply the **saved** plan only after approval.
 
 Tear-down of dev: `terraform destroy` (the AKS-managed node resource group is
 removed by AKS; the state storage is unaffected).
@@ -736,13 +730,9 @@ terraform fmt -check -recursive
 
 for d in bootstrap environments/dev modules/aks modules/storage_account; do
   (cd "$d" && terraform init -backend=false -input=false >/dev/null \
-            && terraform validate && terraform test)
+            && terraform validate)
 done
 ```
-
-`terraform test` uses a **mocked `azurerm` provider**: every run builds a real
-plan without credentials. The mocked runs still execute the provider's own
-argument validation on known values.
 
 Results at the time of writing (Terraform 1.17.2, azurerm 5.14.0):
 
@@ -750,27 +740,18 @@ Results at the time of writing (Terraform 1.17.2, azurerm 5.14.0):
 |---|---|---|
 | `terraform fmt -check -recursive` | all | pass |
 | `terraform validate` | bootstrap, environments/dev, modules/aks, modules/storage_account | pass |
-| `terraform test` | `bootstrap` (9 runs, one mocked apply checking the role assignment scopes) | 9 passed |
-| `terraform test` | `modules/aks` (cluster 15, network 19, node pools 16, security/observability 14, outputs/access 6) | 70 passed |
-| `terraform test` | `modules/storage_account` (account 13, security 10, containers 11, access 7), with Terraform 1.17.2 and 1.9.8 | 41 passed |
-| Bootstrap state migration | previous inline bootstrap applied with the mocked provider, current one planned against that state (`terraform test -verbose`, `state_key`) | every object moved; 0 to add, 0 to destroy, 1 tag update |
 | Storage module README examples | the three `module` blocks of `modules/storage_account/README.md` (+ private endpoint), planned in a temporary harness with the mocked provider | fmt + validate + plan pass |
-| `terraform test` | `environments/dev` (2 runs, using `terraform.tfvars`) | 2 passed |
 | Lock files | init with the committed lock file | unchanged, 4 platforms |
 | README examples ([§10](#10-usage-examples)) | the two `module "aks"` blocks, planned in a temporary harness with the mocked provider (placeholder group ID replaced by a GUID, `container_registry_ids` line excluded, see [§14](#14-known-limitations-and-pending-azure-dependent-validation)) | validate + plan pass |
 | Declaration lint (ad-hoc script: unused/undeclared variables and locals, naming, descriptions, types) | all | 0 findings |
-
-Each suite asserts on planned values and has negative tests (`expect_failures`)
-for every validation rule. A deliberately wrong assertion fails, and an
-assertion on a value unknown at plan time errors instead of passing.
 
 ### Pre-commit hooks
 
 The repository's pre-commit hooks ([`docs/pre-commit.md`](../docs/pre-commit.md))
 run the fast checks above at each commit (formatting, `ci.py azure-config`,
 Markdown, generated module references, secrets), `init` + `validate` and
-TFLint on the affected roots at each push, and everything, tests and
-scanners included, with `pre-commit run --hook-stage manual --all-files`.
+TFLint on the affected roots at each push, and everything, scanners
+included, with `pre-commit run --hook-stage manual --all-files`.
 
 ### Static analysis and security scanning (CI pipeline)
 
@@ -810,9 +791,9 @@ cd environments/dev && terraform apply dev.tfplan                       # real d
 ```
 
 Module minimum version check (declared `>= 1.9.0`): the pipeline's
-"minimum Terraform version" job validates and tests `modules/aks` and
+"minimum Terraform version" job validates `modules/aks` and
 `modules/storage_account` with Terraform 1.9.8; locally:
-`tfenv use 1.9.8 && cd modules/storage_account && terraform init -backend=false && terraform validate && terraform test`
+`tfenv use 1.9.8 && cd modules/storage_account && terraform init -backend=false && terraform validate`
 (same for `modules/aks`).
 
 Storage Account module checks that need Azure (pending): the bootstrap's
@@ -858,14 +839,14 @@ and a first `terraform init` of `environments/dev` against the new account.
 | Area | Ready | Pending (needs Azure) |
 |---|---|---|
 | Version pinning, lock files | ✅ | — |
-| Bootstrap configuration | ✅ validated + 9 offline tests; uses the Storage Account module; migration of a pre-module state simulated | `terraform apply` |
-| Storage Account module | ✅ validated + 41 offline tests (Terraform 1.17.2 and 1.9.8); README examples planned | real plan/apply through the bootstrap, drift check, `az` checks (runbook 03 BS-01) |
+| Bootstrap configuration | ✅ validated; uses the Storage Account module; `moved.tf` maps pre-module states to the module addresses | `terraform apply` |
+| Storage Account module | ✅ validated (Terraform 1.17.2 and 1.9.8); README examples planned | real plan/apply through the bootstrap, drift check, `az` checks (runbook 03 BS-01) |
 | Backend configuration (`backend.tf`) | ✅ | `backend.hcl` (from bootstrap output), first `terraform init` |
-| AKS module | ✅ validated + 70 offline tests | real plan/apply; Azure-side checks (quotas, SKU/zone availability, policy compliance, RBAC propagation) |
-| dev environment | ✅ validated + 2 offline tests | `TODO(azure-access)` values, plan/apply, `kubectl` smoke test |
+| AKS module | ✅ validated | real plan/apply; Azure-side checks (quotas, SKU/zone availability, policy compliance, RBAC propagation) |
+| dev environment | ✅ validated | `TODO(azure-access)` values, plan/apply, `kubectl` smoke test |
 | rec / ppr / prod | directories only | created from dev ([§2](#adding-an-environment-rec-ppr-prod)) |
 | TFLint, Gitleaks, Trivy, Checkov | run locally on WSL ([§12](#12-validation-commands)): TFLint, Gitleaks and the Trivy gate pass; Checkov has 3 pre-existing findings outside the storage scope | first CI run; decision on `CKV_AZURE_232`, `CKV_AZURE_172`, `CKV2_AZURE_31` |
-| Modules on Terraform 1.9.x | `modules/storage_account` and `modules/aks` tests pass locally with 1.9.8; CI minimum-version job for both | first CI run |
+| Modules on Terraform 1.9.x | `modules/storage_account` and `modules/aks` validate locally with 1.9.8; CI minimum-version job for both | first CI run |
 | CI/CD plan/apply | implemented ([`docs/ci-cd.md`](../docs/ci-cd.md)) | Azure identities + GitHub environments, then `AZURE_DEPLOYMENT_ENABLED=true` |
 
 ### Steps to complete the initial deployment when Azure access is granted
@@ -886,4 +867,4 @@ and a first `terraform init` of `environments/dev` against the new account.
 * Single region per environment; multi-region or disaster-recovery topology is out of scope.
 * The `CanNotDelete` lock on the state account also blocks deleting state containers (and possibly revoking role assignments scoped to them) until it is lifted.
 * Storage Account module: no private endpoint or private DNS (the caller creates them), no customer-managed keys, no diagnostic settings (blob logging), no lifecycle management or immutability policies, no hierarchical namespace (ADLS Gen2), SFTP, NFS or static website. `prevent_destroy` is part of the module and applies to every caller. Minimum TLS version is fixed at `TLS1_2` (the only value azurerm 5.14 accepts).
-* The AcrPull assignment (`container_registry_ids`) is covered by `terraform validate` but not by the offline tests: mocked providers cannot populate the computed `kubelet_identity` block.
+* The AcrPull assignment (`container_registry_ids`) is only covered by `terraform validate`: its principal is the object ID of the computed `kubelet_identity` block, known after the first apply.

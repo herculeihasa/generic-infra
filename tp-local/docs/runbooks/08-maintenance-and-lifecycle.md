@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | Upgrades (MicroK8s, Terraform, providers, add-ons, charts), backups and restores, reset, full recreation and decommissioning |
-| **Status** | Version pinning **Implemented**; channel-change logic covered by the stubbed script suite; every procedure on a real host **Pending external prerequisites** |
+| **Status** | Version pinning and channel-change logic **Implemented**; every procedure on a real host **Pending external prerequisites** |
 | **Code** | `tp-local/.terraform-version`, `bootstrap/variables.tf`, `environments/dev/versions.tf`, `environments/dev/.terraform.lock.hcl`, `environments/dev/terraform.tfvars`, `scripts/wsl/prepare-wsl.sh` |
 
 ## 1. What is pinned where
@@ -30,8 +30,8 @@
 
 ## MNT-01 Upgrade MicroK8s (Kubernetes minor version)
 
-**Status:** Implemented (channel change through `snap refresh`; logic
-covered by the stubbed suite); Pending external prerequisites.
+**Status:** Implemented (channel change through `snap refresh`); Pending
+external prerequisites.
 
 **Prerequisites:** backup (MNT-07); move **one minor version at a time**;
 stay on the same confinement (classic → `-strict` needs R-06 of
@@ -102,7 +102,7 @@ prerequisites.
    `tp-local/.terraform-version` (the pipeline reads the same file). A new
    major version also needs `required_version` in `bootstrap/versions.tf`
    and `environments/dev/versions.tf`.
-2. Run the offline gates ([04 TF-02](04-terraform-operations.md#tf-02-format-validate-and-test-offline))
+2. Run the offline gates ([04 TF-02](04-terraform-operations.md#tf-02-format-and-validate-offline))
    and open a pull request.
 3. After merge, install it in WSL (repository root):
 
@@ -126,7 +126,7 @@ anywhere).
 cd tp-local/environments/dev
 terraform init -upgrade -backend=false
 terraform providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64
-terraform validate && terraform test
+terraform validate
 git diff .terraform.lock.hcl
 ```
 

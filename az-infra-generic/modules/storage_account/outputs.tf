@@ -73,7 +73,7 @@ output "secondary_blob_endpoint" {
 }
 
 # =============================================================================
-# Security posture (as applied; useful for compliance reports and tests)
+# Security posture (as applied; useful for compliance reports and audits)
 # =============================================================================
 
 output "security_configuration" {

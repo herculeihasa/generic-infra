@@ -8,7 +8,6 @@
 #   main.tf        The storage account, its blob containers, optional Azure
 #                  RBAC role assignments and optional CanNotDelete lock
 #   outputs.tf     Module outputs (no access keys, no connection strings)
-#   tests/         Offline `terraform test` suites (mocked azurerm provider)
 #
 # The module never creates the resource group: it is owned by the calling
 # configuration and passed in by name, so the module can be reused across

@@ -8,7 +8,6 @@
 #   identity.tf    Control plane identity
 #   main.tf        The AKS cluster
 #   outputs.tf     Module outputs
-#   tests/         Offline `terraform test` suites (mocked azurerm provider)
 #
 # The module never creates the resource group, virtual network, Log Analytics
 # workspace or Key Vault: those are owned by the calling configuration and

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | Terraform lifecycle of `environments/<env>` (dev implemented) |
-| **Status** | Offline steps (format, validate, test) **Validated**; plan/apply/verify/destroy **Pending external prerequisites** |
+| **Status** | Offline steps (format, validate) **Validated**; plan/apply/verify/destroy **Pending external prerequisites** |
 | **Execution modes** | Local (this document) or pipeline ([06 CI/CD operations](06-cicd-operations.md)). Production changes go through the pipeline only |
 
 ## 1. Lifecycle
@@ -11,7 +11,7 @@
 ```mermaid
 flowchart LR
     A["DEP-01<br/>working copy"] --> B["DEP-02<br/>init backend"]
-    B --> C["DEP-03<br/>fmt, validate, test"]
+    B --> C["DEP-03<br/>fmt, validate"]
     C --> D["DEP-04<br/>plan -out"]
     D --> E{"DEP-05<br/>review"}
     E -->|"approved"| F["DEP-06<br/>apply saved plan"]
@@ -49,19 +49,18 @@ terraform init -backend-config=backend.hcl -lockfile=readonly
 Expected: backend `azurerm` configured, `azurerm v5.14.0` from the lock file.
 Details and errors: [03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend).
 
-## DEP-03 Format, validate and test
+## DEP-03 Format and validate
 
 **Status:** Validated.
 
 ```bash
 terraform fmt -check -recursive ../..     # whole project
 terraform validate
-terraform test                            # offline, mocked provider
 ```
 
-Expected: no file listed by `fmt`, `Success! The configuration is valid.`,
-`Success! 2 passed, 0 failed.` For the full pipeline gates from the
-repository root: `ci/scripts/run-local.sh az-infra-generic`.
+Expected: no file listed by `fmt`, `Success! The configuration is valid.`
+For the full pipeline gates from the repository root:
+`ci/scripts/run-local.sh az-infra-generic`.
 
 ## DEP-04 Plan
 

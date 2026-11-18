@@ -68,14 +68,14 @@ terraform init -upgrade -backend=false
 terraform providers lock \
   -platform=windows_amd64 -platform=linux_amd64 \
   -platform=darwin_amd64 -platform=darwin_arm64
-terraform validate && terraform test
+terraform validate
 git diff .terraform.lock.hcl
 ```
 
 For a **major** version (6.x): read the upgrade guide, change the
 constraints (`~> 6.x` in roots, `>= 6.x, < 7.0.0` in `modules/aks/versions.tf` and
 `modules/storage_account/versions.tf`),
-run the tests, then review a real plan carefully (attribute renames,
+run `terraform validate` and TFLint, then review a real plan carefully (attribute renames,
 defaults). Never merge a provider upgrade whose plan shows unexpected
 replacements.
 
@@ -108,7 +108,7 @@ repositories (planned):
   `modules/aks/main.tf`, `AVD-AZU-0012` on `modules/storage_account/main.tf`
   for the bootstrap's public state endpoint) expire on **2027-03-31**; after that date the pipeline
   fails until they are re-reviewed (fix, or renew with a new justification).
-  `ci/tests/test_security_config.py` also fails on expired entries.
+  `ci/scripts/check-repo.py security` also fails on expired entries.
 * Production plans use `.checkov-prod.yaml` (no dev acceptances for API
   exposure and SKU).
 

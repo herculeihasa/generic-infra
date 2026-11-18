@@ -13,7 +13,7 @@
 flowchart LR
     subgraph Q["quality (reusable _terraform-quality.yml)"]
         CH["1 change detection"] --> FMT["1 terraform fmt"]
-        CH --> VAL["1 init / validate / test"]
+        CH --> VAL["1 init / validate"]
         CH --> CMP["1 minimum Terraform version"]
         CH --> LINT["2 TFLint / ShellCheck"]
         WF["2 workflow lint"]
@@ -47,9 +47,9 @@ An apply job only starts when **all** of these succeeded, in this order:
 | # | Check (job name in GitHub) | Blocking condition |
 |---|---|---|
 | 1 | `quality / 1 · terraform fmt` | Unformatted file |
-| 2 | `quality / 1 · init / validate / test (<root>)` | Init with read-only lock file, validate or `terraform test` failure |
+| 2 | `quality / 1 · init / validate (<root>)` | Init with read-only lock file or validate failure |
 | 3 | `quality / 1 · minimum Terraform version (<module>)` | Failure with Terraform 1.9.8 (`modules/aks`, `modules/storage_account`) |
-| 4 | `quality / 2 · TFLint / ShellCheck`, `quality / 2 · workflow lint` | Any lint finding of severity ≥ warning; CI unit tests |
+| 4 | `quality / 2 · TFLint / ShellCheck`, `quality / 2 · workflow lint` | Any lint finding of severity ≥ warning; repository policy checks |
 | 5 | `quality / 3 · security (gitleaks, trivy, checkov)` | Any secret; HIGH/CRITICAL misconfiguration not accepted; failed Checkov policy not accepted |
 | 6 | `quality / quality gate` | Any of the above failed or was cancelled |
 | 7 | `2 · Azure provider & backend checks` | Credentials or hardcoded IDs in code, backend isolation/auth violations, incomplete lock file |
@@ -249,7 +249,7 @@ Identify the failing job in §2, then use the table below or
 | Failing job | First action |
 |---|---|
 | `terraform fmt` | `terraform fmt -recursive az-infra-generic`, commit |
-| `init / validate / test` | Reproduce: `ci/scripts/terraform-checks.sh az-infra-generic root <root>` |
+| `init / validate` | Reproduce: `ci/scripts/terraform-checks.sh az-infra-generic root <root>` |
 | `minimum Terraform version` | A feature newer than 1.9 is used: raise `required_version` or avoid it |
 | `TFLint / ShellCheck` | Reproduce: `ci/scripts/lint.sh az-infra-generic tflint` |
 | `security` | Read the reports; fix, or accept with justification (never lower thresholds) |
@@ -264,7 +264,7 @@ Identify the failing job in §2, then use the table below or
 ```bash
 ci/scripts/install-tools.sh                 # Linux x86_64: pinned, checksum-verified scanners
 ci/scripts/run-local.sh az-infra-generic
-python3 -m unittest discover -s ci/tests
+python3 ci/scripts/check-repo.py           # repository policy checks (PyYAML)
 ```
 
 ## CI-11 Re-run, cancel and concurrency

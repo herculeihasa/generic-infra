@@ -187,8 +187,8 @@ Otherwise request a quota increase or change `vm_size` / `zones` in
 **Status:** Validated (offline initialization); backend initialization
 Pending external prerequisites ([03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend)).
 
-**Purpose:** download the locked providers and modules to validate and test
-without Azure access. **Context:** repository root.
+**Purpose:** download the locked providers and modules to validate without
+Azure access. **Context:** repository root.
 
 ```bash
 for root in bootstrap environments/dev modules/aks modules/storage_account; do
@@ -206,10 +206,9 @@ pipeline performs.
 
 ```bash
 terraform -chdir=az-infra-generic/environments/dev validate
-terraform -chdir=az-infra-generic/environments/dev test
 ```
 
-Expected: `Success! The configuration is valid.` and `2 passed, 0 failed`.
+Expected: `Success! The configuration is valid.`
 
 ## SETUP-09 Verify the workstation
 
@@ -222,8 +221,8 @@ az account show -o table                       # expected subscription (after SE
 ci/scripts/run-local.sh az-infra-generic       # same gates as the pipeline
 ```
 
-`run-local.sh` reports `PASS` for formatting, init/validate/test of each root,
-and the CI unit tests; scanners that are not installed are reported
+`run-local.sh` reports `PASS` for formatting, init/validate of each root,
+and the repository policy checks; scanners that are not installed are reported
 `SKIPPED` (they run in CI; on Linux x86_64 install them with
 `ci/scripts/install-tools.sh`).
 

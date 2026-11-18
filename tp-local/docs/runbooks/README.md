@@ -9,8 +9,8 @@ environment on a Windows workstation.
 > [!IMPORTANT]
 > **Execution status: never run on a real WSL instance.** The authoring
 > machine had WSL installed but no Linux distribution. Terraform
-> configurations, plans and the provisioning scripts were validated offline
-> (mocked providers, stubbed `snap`/`microk8s`/`sudo`); every command that
+> configurations and the provisioning scripts were validated offline
+> (formatting, `terraform validate`); every command that
 > needs WSL Ubuntu, MicroK8s, kubectl or Helm is marked *Pending external
 > prerequisites*. The first operator to run them should report deviations and
 > update these runbooks.
@@ -33,7 +33,7 @@ environment on a Windows workstation.
 
 | Status | Meaning |
 |---|---|
-| **Validated** | Executed successfully during development (offline: `terraform validate`/`test`, stubbed script suite, Windows host check) |
+| **Validated** | Executed successfully during development (offline: `terraform fmt`/`validate`, linters and scanners, Windows host check) |
 | **Implemented** | Supported by the code; not executed end to end |
 | **Pending external prerequisites** | Requires a WSL Ubuntu distribution, the running cluster, a self-hosted runner or GitHub configuration |
 | **Not implemented** | Not supported; do not attempt |

@@ -18,7 +18,7 @@ kubeconfig needed). Commands needing root are marked **(sudo)**.
 
 ## MK-01 Check cluster readiness
 
-**Status:** Pending external prerequisites (`wait-ready.sh` logic covered by the stubbed suite).
+**Status:** Pending external prerequisites.
 
 ```bash
 microk8s status --wait-ready --timeout 60      # "microk8s is running" + add-on list

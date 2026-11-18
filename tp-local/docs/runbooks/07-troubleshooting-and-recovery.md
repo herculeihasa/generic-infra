@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | Diagnosing failures of the WSL host, MicroK8s, Terraform, Helm and the pipeline; recovering access, state and the cluster |
-| **Status** | Error messages quoted from the project scripts are **Implemented** (and covered by the stubbed script suite); diagnosis and recovery steps are **Pending external prerequisites** (never exercised on a real cluster) |
+| **Status** | Error messages quoted from the project scripts are **Implemented**; diagnosis and recovery steps are **Pending external prerequisites** (never exercised on a real cluster) |
 | **Code** | `modules/microk8s/scripts/*.sh`, `scripts/verify-cluster.sh`, `scripts/tf-init.sh` |
 
 **Context:** WSL as the cluster owner unless marked **PowerShell** or
@@ -291,7 +291,7 @@ label creation, no namespace creation.
 
 ## R-05 Rebuild a lost stage 1 state
 
-**Status:** Implemented (script idempotence covered by the stubbed suite).
+**Status:** Implemented.
 
 The scripts detect what already exists (`MicroK8s already installed`, same
 channel: no refresh, add-on enable is idempotent), so a plain apply rebuilds

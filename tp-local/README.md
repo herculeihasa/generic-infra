@@ -4,8 +4,8 @@ Local Kubernetes infrastructure as code: a **MicroK8s** cluster inside **WSL2
 Ubuntu**, provisioned and configured with Terraform, plus a Kubernetes/Helm
 layer ready for DevOps experiments.
 
-> **Status:** implemented and validated offline (formatting, validation,
-> `terraform test` with mocked providers, script behaviour tests). It has not
+> **Status:** implemented and validated offline (formatting and `terraform
+> validate`; CI adds TFLint, ShellCheck and the security scanners). It has not
 > yet been executed on a real WSL instance: the authoring machine had no WSL
 > distribution. See [§11](#11-known-limitations).
 
@@ -76,21 +76,19 @@ runs and a self-hosted CI runner (same Linux user) share one state.
 tp-local/
 ├── .terraform-version   .tflint.hcl   .gitignore   .gitattributes (LF: scripts run in WSL)
 ├── bootstrap/                     # stage 1 (no provider, no lock file)
-│   ├── versions.tf | variables.tf | main.tf | outputs.tf
-│   └── tests/bootstrap.tftest.hcl
+│   └── versions.tf | variables.tf | main.tf | outputs.tf
 ├── environments/
 │   ├── dev/                       # stage 2
 │   │   ├── backend.tf             # local backend, path from scripts/tf-init.sh
 │   │   ├── versions.tf | providers.tf | variables.tf | locals.tf
 │   │   ├── main.tf                # platform baseline
 │   │   ├── helm.tf                # Helm releases
-│   │   ├── outputs.tf | terraform.tfvars | .terraform.lock.hcl
-│   │   └── tests/dev.tftest.hcl
+│   │   └── outputs.tf | terraform.tfvars | .terraform.lock.hcl
 │   └── rec/                       # empty, reserved
 ├── modules/
 │   ├── microk8s/                  # install, channel, add-ons, readiness, kubeconfig
 │   │   └── scripts/               # lib, preflight, install, set-channel, addon, wait-ready,
-│   │       └── tests/run.sh       #   export-kubeconfig, uninstall + behaviour tests
+│   │                              #   export-kubeconfig, uninstall
 │   └── k8s-namespace/             # namespace security baseline
 └── scripts/
     ├── host/Test-WslHost.ps1      # Windows: read-only host check
@@ -213,10 +211,10 @@ release, **podinfo 6.17.0** in `apps`, is the Helm and ingress smoke test.
 |---|---|---|---|
 | 1 | Prepare WSL | Windows PowerShell | `wsl --update`; `wsl --install -d Ubuntu-24.04`; optional `.wslconfig` + `wsl --shutdown`; `.\tp-local\scripts\host\Test-WslHost.ps1` |
 | 2 | Install dependencies | WSL Ubuntu (repo root) | `sudo tp-local/scripts/wsl/prepare-wsl.sh --with-kubectl-helm`. If it enabled systemd: `wsl --shutdown` in PowerShell, reopen Ubuntu, run it again |
-| 3 | Initialise MicroK8s | WSL, `tp-local/bootstrap` | `sudo -v`<br>`../scripts/tf-init.sh bootstrap`<br>`terraform validate && terraform test`<br>`terraform plan -out=bootstrap.tfplan`<br>`terraform apply bootstrap.tfplan` |
+| 3 | Initialise MicroK8s | WSL, `tp-local/bootstrap` | `sudo -v`<br>`../scripts/tf-init.sh bootstrap`<br>`terraform validate`<br>`terraform plan -out=bootstrap.tfplan`<br>`terraform apply bootstrap.tfplan` |
 | 4 | Configure Kubernetes access | WSL | `newgrp microk8s` (or reopen the terminal)<br>`export KUBECONFIG=~/.kube/tp-local-microk8s.yaml && kubectl get nodes` |
 | 5 | Initialise Terraform (stage 2) | WSL, `tp-local/environments/dev` | `../../scripts/tf-init.sh environments/dev` |
-| 6 | Validate | WSL, `tp-local/environments/dev` | `terraform fmt -check -recursive ../..`<br>`terraform validate && terraform test` |
+| 6 | Validate | WSL, `tp-local/environments/dev` | `terraform fmt -check -recursive ../..`<br>`terraform validate` |
 | 7 | Plan and review | WSL, `tp-local/environments/dev` | `terraform plan -out=dev.tfplan` |
 | 8 | Apply | WSL, `tp-local/environments/dev` | `terraform apply dev.tfplan` |
 | 9 | Verify cluster health | WSL (repo root) | `tp-local/scripts/verify-cluster.sh` |
@@ -248,15 +246,11 @@ Offline (no cluster, no root; also run by CI), from `tp-local/`:
 ```bash
 terraform fmt -check -recursive
 for d in bootstrap modules/microk8s modules/k8s-namespace environments/dev; do
-  (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform validate && terraform test)
+  (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform validate)
 done
-bash modules/microk8s/scripts/tests/run.sh
 ```
 
-Results at the time of writing: validate passes for the 4 configurations;
-`terraform test`: bootstrap 1, microk8s 11, k8s-namespace 8, dev 6 (26 runs,
-including negative tests for every validation rule); script behaviour suite:
-59 checks across 25 cases (stubbed `snap`/`microk8s`/`sudo`).
+Results at the time of writing: validate passes for the 4 configurations.
 
 Live (WSL with the cluster): `terraform plan` in both stages (expect "No
 changes" after apply) and `scripts/verify-cluster.sh`, which checks the
@@ -303,14 +297,14 @@ Workflow `.github/workflows/tp-local.yml`, documented in
 [`../docs/ci-cd.md`](../docs/ci-cd.md) (§9 for the WSL runner):
 
 * **GitHub-hosted runners** (every PR/push): formatting, init with the
-  read-only lock file, validate, `terraform test` (all 4 configurations), the
-  minimum Terraform version job on the modules, the script behaviour suite,
-  TFLint, ShellCheck, Gitleaks, Trivy, Checkov. They never touch a cluster.
+  read-only lock file, validate (all 4 configurations), the minimum
+  Terraform version job on the modules, TFLint, ShellCheck, Gitleaks, Trivy,
+  Checkov. They never touch a cluster.
 * **Self-hosted runner inside WSL** (manual *Run workflow* from `main` with
   `local-deploy: true`, repository variable `TP_LOCAL_RUNNER_ENABLED=true`):
   preflight → plan `bootstrap` → approval (`tp-local` environment) → apply
   the saved plan → plan `environments/dev` → approval → apply →
-  `scripts/verify-cluster.sh` integration tests.
+  post-deployment verification (`scripts/verify-cluster.sh`).
 * Steps needing root (first install, channel change) cannot run unattended
   and stay interactive (`sudo -v` then `terraform apply` in WSL).
 

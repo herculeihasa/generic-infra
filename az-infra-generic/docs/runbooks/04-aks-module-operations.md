@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | `az-infra-generic/modules/aks` and its use by `environments/dev` |
-| **Status** | Implemented; module validated offline (`modules/aks/tests`: 70 plan-mode runs). Every cluster operation: **Pending external prerequisites** |
+| **Status** | Implemented; module validated offline (`terraform validate`, Terraform 1.17.2 and 1.9.8). Every cluster operation: **Pending external prerequisites** |
 | **Code** | `modules/aks/main.tf`, `modules/aks/identity.tf`, `modules/aks/node_pools.tf`, `modules/aks/monitoring.tf`, `modules/aks/variables.tf`, `modules/aks/outputs.tf` |
 | **Full reference** | [project README §9 (inputs/outputs)](../../README.md#9-aks-module-inputs-and-outputs), [§10 (examples)](../../README.md#10-usage-examples) |
 
@@ -93,8 +93,8 @@ quota ([02 SETUP-07](02-prerequisites-and-setup.md#setup-07-check-regional-capac
 2. Run the deployment lifecycle of [05 Deployment procedures](05-deployment-procedures.md) (init, validate,
    plan, apply), or the pipeline.
 
-**Expected result:** the first plan adds **12** resources (measured on the
-mocked plan of `environments/dev/tests`): resource group, VNet, subnet, Log
+**Expected result:** the first plan adds **12** resources (counted during
+development on a mocked-provider plan of `environments/dev`): resource group, VNet, subnet, Log
 Analytics workspace and, in `module.aks`, the user-assigned identity, the
 `Network Contributor` and `cluster_admin["deployer"]` role assignments, the
 cluster, node pool `apps`, data collection rule + association and the

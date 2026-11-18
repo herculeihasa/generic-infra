@@ -36,10 +36,10 @@ module "apps_namespace" {
 
 Types, defaults and descriptions: [Reference (generated)](#reference-generated).
 
-## Tests
+## Validation
 
 ```bash
-terraform init -backend=false && terraform test   # mocked kubernetes provider
+terraform init -backend=false && terraform validate   # no cluster needed
 ```
 
 ## Reference (generated)

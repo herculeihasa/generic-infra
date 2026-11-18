@@ -36,10 +36,9 @@ repository moved to Azure Repos.
 └── pre-commit.yml            repository-wide: commit-stage pre-commit hooks on every file
 ci/
 ├── tool-versions.env         pinned tool versions + SHA-256
-├── projects/<project>.json   per-project manifest (roots, compat checks, script tests, deployments)
-├── scripts/                  logic shared by CI and local runs (bash + Python stdlib)
-├── policies/                 policy-as-code (custom Checkov policies)
-└── tests/                    unit tests (helpers, plan report, apply guard) + workflow/security policy tests
+├── projects/<project>.json   per-project manifest (roots, compat checks, deployments)
+├── scripts/                  logic shared by CI and local runs (bash + Python), incl. check-repo.py (repository policy checks)
+└── policies/                 policy-as-code (custom Checkov policies)
 .github/dependabot.yml        weekly PRs for action SHA pins and Terraform providers
 .gitleaks.toml  .checkov.yaml  .shellcheckrc        repository-level scanner configuration
 .github/actionlint.yaml       actionlint: labels of the self-hosted runner
@@ -66,11 +65,11 @@ docs/ci-cd.md                 this document
 | | Formatting | `terraform fmt -check -recursive` | any unformatted file | yes |
 | | Initialisation + lock-file consistency | `terraform init -backend=false -lockfile=readonly` | committed lock file missing a provider or inconsistent with the constraints (4-platform `azurerm` coverage is checked by the Azure static checks) | yes |
 | | Validation | `terraform validate` | any error | yes |
-| | Unit tests | `terraform test` (mocked providers), script suites | any failed run | yes |
-| | Version compatibility | validate + test with the oldest supported Terraform (`TERRAFORM_MIN_VERSION`) on modules | any failure | yes |
+| | Version compatibility | validate with the oldest supported Terraform (`TERRAFORM_MIN_VERSION`) on modules | any failure | yes |
 | 2 Static analysis | Terraform lint | TFLint (`terraform` recommended preset, `azurerm` ruleset for Azure) | any issue of severity ≥ warning | yes |
 | | Shell lint | ShellCheck | any finding | yes |
 | | Workflow lint | actionlint | any finding | yes |
+| | Repository policies | `ci/scripts/check-repo.py` (workflow hardening, security-tool configuration, pre-commit pins, documentation consistency) | any violated rule | yes |
 | 3 Security & compliance | Secrets | Gitleaks (Git history of the change) | any finding | yes |
 | | IaC misconfiguration | Trivy `config` | any **HIGH** or **CRITICAL** finding not explicitly accepted | yes (MEDIUM/LOW reported only) |
 | | Compliance policies | Checkov (built-in + custom policies, Terraform/Kubernetes/GitHub Actions) | any failed check not explicitly accepted | yes |
@@ -88,7 +87,7 @@ Gate thresholds are deliberately strict: a finding is either **fixed** or
 
 | Concern | Selected | Not duplicated by | Rationale |
 |---|---|---|---|
-| Terraform syntax/semantics | `terraform validate` / `test` | — | Native, authoritative |
+| Terraform syntax/semantics | `terraform validate` | — | Native, authoritative |
 | Terraform & provider lint | **TFLint** | — | Catches provider-specific errors (invalid VM sizes, deprecated syntax, unused declarations) that security scanners ignore |
 | Secrets in Git history | **Gitleaks** | Trivy/Checkov secret scanners disabled | Scans commits, not just the working tree |
 | Misconfiguration, severity-ranked | **Trivy** `config` | — | Built-in severities give a clear HIGH/CRITICAL threshold; covers Terraform and Kubernetes |
@@ -137,10 +136,11 @@ A finding is **fixed** by default. Accepting it is a reviewed code change:
 
 * **Checkov:** add the check ID to `skip-check` in the relevant
   `.checkov.yaml`, preceded by a comment explaining why (enforced by
-  `ci/tests/test_security_config.py`).
+  `ci/scripts/check-repo.py security`).
 * **Trivy:** add an entry to `<project>/.trivyignore.yaml` with `id`,
   `paths` (scoped), `statement` (justification) and `expired_at`. When it
-  expires the finding fails the pipeline again (also enforced by tests).
+  expires the finding fails the pipeline again (also enforced by
+  `ci/scripts/check-repo.py security`).
 * Thresholds are never lowered; scanners are never disabled to pass.
 
 Currently accepted (all about optional hardening the code supports but `dev`
@@ -166,7 +166,7 @@ A plan never deploys by itself. An apply needs **all** of the following:
 | Layer | Mechanism |
 |---|---|
 | Quality gates passed | Plan jobs depend on the `quality` gate (and on `azure-config` for Azure); any failed gate skips plan and apply |
-| Trusted ref and event | Apply jobs run only on `push`/`workflow_dispatch` from `refs/heads/main` (never on pull requests or other branches); enforced in the callers, re-checked by `ci.py apply-guard`, and by policy tests |
+| Trusted ref and event | Apply jobs run only on `push`/`workflow_dispatch` from `refs/heads/main` (never on pull requests or other branches); enforced in the callers, re-checked by `ci.py apply-guard`, and by `ci/scripts/check-repo.py workflows` |
 | Manual approval | Apply jobs are bound to a GitHub **environment** with required reviewers (`azure-dev`, `azure-prod`, `tp-local`) |
 | Environment-specific permissions | Each environment holds its own identity (`AZURE_CLIENT_ID`…): read-only identity in `*-plan` environments, deployment identity in the approval environments; deployment branch rule `main` |
 | Production rules | `prod` only on manual dispatch with `environment: prod`; `azure-prod` requires reviewers (≥ 2 recommended, *prevent self-review*, optional wait timer); stricter plan policies (`.checkov-prod.yaml`) |
@@ -247,9 +247,9 @@ Workflow: [`.github/workflows/tp-local.yml`](../.github/workflows/tp-local.yml).
 
 | Part | Runner | When |
 |---|---|---|
-| Stages 1-3 (validation, lint, script tests, security) | GitHub-hosted | Every PR / push touching tp-local or shared CI |
+| Stages 1-3 (validation, lint, security) | GitHub-hosted | Every PR / push touching tp-local or shared CI |
 | Readiness decision | GitHub-hosted | Always; explains in the summary why local stages did or did not run |
-| Preflight, plan, approval, apply, integration tests | **Self-hosted, in WSL** (`[self-hosted, linux, wsl, microk8s]`) | Only `workflow_dispatch` from `main` with `local-deploy: true`, and only if `TP_LOCAL_RUNNER_ENABLED=true` |
+| Preflight, plan, approval, apply, post-deployment verification | **Self-hosted, in WSL** (`[self-hosted, linux, wsl, microk8s]`) | Only `workflow_dispatch` from `main` with `local-deploy: true`, and only if `TP_LOCAL_RUNNER_ENABLED=true` |
 
 A GitHub-hosted runner never targets the local cluster: it cannot reach it,
 and the local state lives on the WSL machine.
@@ -279,7 +279,7 @@ Then set the repository variable `TP_LOCAL_RUNNER_ENABLED=true`.
 * Use it with a **private repository** only: workflows from pull requests
   could otherwise target the runner and execute code on your machine.
 * Jobs on the runner only run on `workflow_dispatch` from `main`
-  (enforced in the workflow and by `ci/tests/test_workflows.py`).
+  (enforced in the workflow and by `ci/scripts/check-repo.py workflows`).
 * Do not grant the runner user passwordless sudo: steps needing root
   (first install, channel change, uninstall) stay interactive and fail with
   an explicit "run sudo -v" message in CI.
@@ -310,7 +310,7 @@ add `id-token: write` (OIDC).
 | Deploy Azure dev | Merge to `main` (or *Run workflow* → `az-infra-generic`, `environment: dev`) → review the plan summary/artifact → approve `azure-dev` |
 | Deploy Azure prod | *Run workflow* → `az-infra-generic`, `environment: prod` (from `main`) → review → approval by the `azure-prod` reviewers |
 | Authorize deletions/replacements | Re-run via *Run workflow* with `allow-destroy: true` (still requires approval) |
-| Deploy tp-local | WSL runner online → *Run workflow* → `tp-local`, `local-deploy: true` → approve `tp-local` for each stage → integration tests |
+| Deploy tp-local | WSL runner online → *Run workflow* → `tp-local`, `local-deploy: true` → approve `tp-local` for each stage → post-deployment verification |
 | Drift detection (Azure) | Weekly schedule: plan only, summary shows any drift; nothing is applied |
 
 ### Running the gates locally
@@ -320,7 +320,7 @@ add `id-token: write` (OIDC).
 ci/scripts/install-tools.sh            # tflint trivy gitleaks actionlint checkov
 ci/scripts/run-local.sh az-infra-generic
 ci/scripts/run-local.sh tp-local
-python3 -m unittest discover -s ci/tests
+python3 ci/scripts/check-repo.py       # repository policy checks (needs PyYAML)
 ```
 
 `run-local.sh` runs the same scripts as CI; gates whose tool is missing are
@@ -365,7 +365,7 @@ policy itself) require the platform owner's review.
 | Item | State |
 |---|---|
 | Workflows, scripts, policies, configuration | Implemented |
-| Validated locally | Python suites (helpers, plan report incl. a real Terraform plan, apply guard, workflow and security policy tests); every Terraform gate of both projects through `run-local.sh`; plan + guard end to end on `tp-local/bootstrap`; script behaviour suites |
+| Validated locally | Repository policy checks (`ci/scripts/check-repo.py`); every Terraform gate of both projects through `run-local.sh`; plan + guard end to end on `tp-local/bootstrap` |
 | Run locally (WSL, pinned versions) | TFLint, Gitleaks, Trivy, Checkov, actionlint and every pre-commit hook. Open findings: Checkov `CKV_AZURE_232`, `CKV_AZURE_172`, `CKV2_AZURE_31` (az-infra-generic) and `CKV2_AZINFRA_4` (tp-local service accounts) |
 | Not run yet | The workflows themselves on GitHub, including the `pre-commit` workflow and the minimum-version job |
 | Pending Azure access | Azure identities, GitHub environments, `AZURE_DEPLOYMENT_ENABLED`; no Azure plan or apply has ever run |

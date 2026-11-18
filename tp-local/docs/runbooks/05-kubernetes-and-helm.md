@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | Stage 2 (`tp-local/environments/dev`): namespaces, RBAC, Kubernetes resources, Helm releases |
-| **Status** | Configuration validated offline (`environments/dev/tests`, `modules/k8s-namespace/tests`); every cluster command **Pending external prerequisites** |
+| **Status** | Configuration validated offline (`terraform validate` of `environments/dev` and `modules/k8s-namespace`); every cluster command **Pending external prerequisites** |
 | **Code** | `environments/dev/main.tf`, `environments/dev/helm.tf`, `environments/dev/terraform.tfvars`, `modules/k8s-namespace/` |
 
 **Context:** WSL; `export KUBECONFIG=~/.kube/tp-local-microk8s.yaml`;

@@ -117,7 +117,6 @@ sequenceDiagram
 | `environments/dev/variables.tf`, `locals.tf`, `main.tf`, `outputs.tf`, `terraform.tfvars` | dev environment |
 | `modules/aks/*.tf` | Module: `versions`, `variables`, `locals`, `identity`, `main`, `node_pools`, `monitoring`, `outputs` |
 | `modules/storage_account/*.tf` | Module: `versions`, `variables`, `locals`, `main`, `outputs` (reference: `modules/storage_account/README.md`) |
-| `*/tests/*.tftest.hcl` | Offline `terraform test` suites (mocked provider) |
 | `*/.terraform.lock.hcl` | Provider lock files of the root configurations (4 platforms) |
 
 ## 5. AKS module architecture

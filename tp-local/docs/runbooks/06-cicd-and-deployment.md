@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | Running `tp-local` through GitHub Actions: hosted quality gates, the self-hosted WSL runner, approvals, and how pipeline runs coexist with interactive runs |
-| **Status** | Workflows **Implemented** (policy tests and local gates validated); not yet executed on GitHub Actions; self-hosted runner **Pending external prerequisites** (none registered) |
+| **Status** | Workflows **Implemented** (policy checks and local gates validated); not yet executed on GitHub Actions; self-hosted runner **Pending external prerequisites** (none registered) |
 | **Code** | `.github/workflows/tp-local.yml`, `.github/workflows/_terraform-quality.yml`, `.github/workflows/_terraform-plan.yml`, `.github/workflows/_terraform-apply.yml`, `ci/scripts/` |
 
 The pipeline design, gates, security rules and GitHub configuration are
@@ -14,9 +14,9 @@ runbook covers the operator procedures.
 
 | Part | Runner | Runs when |
 |---|---|---|
-| Stages 1-3: fmt, validate/test, minimum version, script tests, lint, security | GitHub-hosted `ubuntu-24.04` | Every pull request / push to `main` touching `tp-local/**` or shared CI files |
+| Stages 1-3: fmt, validate, minimum version, lint, security | GitHub-hosted `ubuntu-24.04` | Every pull request / push to `main` touching `tp-local/**` or shared CI files |
 | Readiness decision | GitHub-hosted | Always, after the gates; writes why local stages did or did not run |
-| Preflight, plans, applies, integration tests | **Self-hosted in WSL**, labels `[self-hosted, linux, wsl, microk8s]` | Only `workflow_dispatch` from `main` with `local-deploy: true` **and** repository variable `TP_LOCAL_RUNNER_ENABLED=true` |
+| Preflight, plans, applies, post-deployment verification | **Self-hosted in WSL**, labels `[self-hosted, linux, wsl, microk8s]` | Only `workflow_dispatch` from `main` with `local-deploy: true` **and** repository variable `TP_LOCAL_RUNNER_ENABLED=true` |
 
 A hosted runner never targets the cluster: it cannot reach a laptop, and
 the state lives in the WSL distribution. Details:
@@ -32,20 +32,19 @@ flowchart TD
     PB -->|"no changes"| PD["local plan environments/dev<br/>environment tp-local-plan"]
     AB --> PD
     PD -->|"changes"| AD["local apply environments/dev<br/>environment tp-local: approval"]
-    PD -->|"no changes"| I["5 · local integration tests<br/>verify-cluster.sh"]
+    PD -->|"no changes"| I["5 · post-deployment verification<br/>verify-cluster.sh"]
     AD --> I
 ```
 
 ## CD-01 Run the gates locally before pushing
 
-**Status:** Validated (Terraform gates and script suites through
-`run-local.sh`). **Context:** WSL or any Linux x86_64 shell, repository root.
+**Status:** Validated (Terraform gates through `run-local.sh`). **Context:** WSL or any Linux x86_64 shell, repository root.
 
 ```bash
 ci/scripts/run-local.sh tp-local
 ```
 
-Expected: every Terraform gate and script test passes. Installing the
+Expected: every Terraform gate passes. Installing the
 scanners (TFLint, ShellCheck, Trivy, Checkov…) for a complete local run:
 [CI/CD §11 Running the gates locally](../../../docs/ci-cd.md#running-the-gates-locally).
 
@@ -133,11 +132,11 @@ gh run watch <run-id>
 ```
 
 **Expected result:** jobs in the order of §1. A stage without changes skips
-its apply job; integration tests run in every case and end with
+its apply job; the post-deployment verification runs in every case and ends with
 `verify-cluster: all checks passed`.
 
 **Validation:** the run summary shows each plan's change counts; the
-integration job is green.
+verification job is green.
 
 ## CD-06 Review and approve a plan
 

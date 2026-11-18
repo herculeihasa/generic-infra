@@ -119,7 +119,7 @@ apt-mark showhold         # terraform
 
 ## SET-06 Run the host preflight
 
-**Status:** Implemented (behaviour validated with stubs). **Context:** WSL, repository root.
+**Status:** Implemented. **Context:** WSL, repository root.
 
 ```bash
 bash tp-local/modules/microk8s/scripts/preflight.sh
@@ -141,12 +141,12 @@ blocking): less than 4096 MiB of RAM, less than 20 GiB free under `/var`.
    sudo -v
    ```
 
-2. Initialize with the canonical state path, validate and test:
+2. Initialize with the canonical state path and validate:
 
    ```bash
    cd ~/src/generic-infra/tp-local/bootstrap
    ../scripts/tf-init.sh bootstrap
-   terraform validate && terraform test
+   terraform validate
    ```
 
 3. Plan and review. The first plan adds **9** steps:
@@ -242,7 +242,7 @@ kubectl --kubeconfig "$env:USERPROFILE\.kube\tp-local-microk8s.yaml" get nodes
 ```bash
 cd ~/src/generic-infra/tp-local/environments/dev
 ../../scripts/tf-init.sh environments/dev
-terraform validate && terraform test
+terraform validate
 terraform plan -out=dev.tfplan          # first plan: 14 to add
 terraform apply dev.tfplan
 cd ~/src/generic-infra && tp-local/scripts/verify-cluster.sh

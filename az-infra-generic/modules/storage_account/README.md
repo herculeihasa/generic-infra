@@ -29,7 +29,7 @@ storage that holds the Terraform remote state of every environment.
 7. [Network access and Terraform connectivity](#network-access-and-terraform-connectivity)
 8. [Authentication and required permissions](#authentication-and-required-permissions)
 9. [Deletion protection](#deletion-protection)
-10. [Requirements, files and tests](#requirements-files-and-tests)
+10. [Requirements, files and validation](#requirements-files-and-validation)
 11. [Troubleshooting](#troubleshooting)
 12. [Reference (generated)](#reference-generated)
 
@@ -196,7 +196,7 @@ metadata, role assignment principals and container keys).
 
 No output exposes an access key, SAS token or connection string. Besides the
 account identifiers and endpoints, `security_configuration` and
-`data_protection` report the effective settings (audits, tests), and
+`data_protection` report the effective settings (audits, compliance reports), and
 `containers` / `role_assignments` give the IDs to use as RBAC scopes. Full
 list: [Reference (generated)](#reference-generated).
 
@@ -290,7 +290,7 @@ registered (the bootstrap registers it through `resource_providers_to_register`)
 * `delete_lock_enabled = true` adds an Azure `CanNotDelete` lock, which also blocks deleting containers (and may block revoking role assignments scoped to them) through Resource Manager. Set it to `false` and apply before such changes.
 * Versioning and soft delete protect the data itself.
 
-## Requirements, files and tests
+## Requirements, files and validation
 
 Terraform `>= 1.9.0, < 2.0.0` (validated with 1.17.2 and 1.9.8) and
 `hashicorp/azurerm` `>= 5.14.0, < 6.0.0` (validated with 5.14.0).
@@ -305,25 +305,12 @@ its version in the root module.
 | `locals.tf` | Derived values (tags, access tier) |
 | `main.tf` | Storage account, containers, role assignments, lock |
 | `outputs.tf` | Outputs |
-| `tests/` | Offline `terraform test` suites using a mocked `azurerm` provider |
 
 ```bash
 cd modules/storage_account
 terraform init -backend=false
-terraform validate
-terraform test   # 41 plan-mode runs, no Azure credentials needed
+terraform validate   # no Azure credentials needed
 ```
-
-| Suite | Runs | Covers |
-|---|---|---|
-| `tests/account.tftest.hcl` | 13 | Placement, tags, kind/tier/replication/access tier, naming validations |
-| `tests/security.tftest.hcl` | 10 | Secure defaults, network rules, explicit opt-outs, rejected inputs |
-| `tests/containers.tftest.hcl` | 11 | Data protection, private and public containers, name/metadata validations |
-| `tests/access.tftest.hcl` | 7 | Role assignments, lock, security output, rejected inputs |
-
-Resource IDs are only known after apply, and Terraform 1.9 cannot tear down an
-apply-mode test of a `prevent_destroy` resource, so the role assignment scope
-wiring is asserted in `bootstrap/tests` (mocked apply, Terraform 1.17).
 
 Security scanners (run through the bootstrap, which calls the module):
 Checkov passes the account checks (including the project policy

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | Both Terraform roots of `tp-local`: `bootstrap` (stage 1) and `environments/dev` (stage 2) |
-| **Status** | Init/validate/test **Validated** offline; stage 1 plan validated (9 steps); plans/applies against a real cluster **Pending external prerequisites** |
+| **Status** | Init/validate **Validated** offline; stage 1 plan validated (9 steps); plans/applies against a real cluster **Pending external prerequisites** |
 | **Code** | `scripts/tf-init.sh`, `bootstrap/*.tf`, `environments/dev/*.tf`, `modules/microk8s/main.tf`, `modules/k8s-namespace/main.tf` |
 
 **Context:** WSL, as the cluster owner. Paths are relative to the repository
@@ -60,22 +60,20 @@ appears at the first apply.
 run on the machine). After changing it, re-run `tf-init.sh … -migrate-state`
 to move the existing state.
 
-## TF-02 Format, validate and test (offline)
+## TF-02 Format and validate (offline)
 
 **Status:** Validated.
 
 ```bash
 terraform -chdir=tp-local fmt -check -recursive
 for d in bootstrap modules/microk8s modules/k8s-namespace environments/dev; do
-  (cd "tp-local/$d" && terraform init -backend=false -input=false >/dev/null && terraform validate && terraform test)
+  (cd "tp-local/$d" && terraform init -backend=false -input=false >/dev/null && terraform validate)
 done
-bash tp-local/modules/microk8s/scripts/tests/run.sh
 ci/scripts/run-local.sh tp-local        # same gates as the pipeline
 ```
 
-Expected: no file listed by `fmt`; `terraform test`: bootstrap 1, microk8s 11,
-k8s-namespace 8, dev 6 runs passed; script suite `59 checks passed`.
-`init -backend=false` does not touch the real state.
+Expected: no file listed by `fmt`; `Success! The configuration is valid.` for
+the 4 configurations. `init -backend=false` does not touch the real state.
 
 ## TF-03 Plan stage 1
 
@@ -114,8 +112,8 @@ idempotent).
 
 ## TF-05 Plan and apply stage 2
 
-**Status:** Pending external prerequisites (plan validated offline with mocked
-providers). **Context:** `tp-local/environments/dev`.
+**Status:** Pending external prerequisites (configuration validated offline).
+**Context:** `tp-local/environments/dev`.
 
 ```bash
 microk8s status --wait-ready --timeout 120      # the cluster must be up

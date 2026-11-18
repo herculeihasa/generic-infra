@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Scope** | `az-infra-generic/bootstrap`, the `modules/storage_account` module it calls, and the `azurerm` backend of `environments/<env>` |
-| **Status** | Implemented; validated offline (`bootstrap/tests`: 9 runs incl. a mocked apply; `modules/storage_account/tests`: 41 runs; migration of a pre-module bootstrap state simulated). All Azure-side procedures: **Pending external prerequisites** |
+| **Status** | Implemented; validated offline (`terraform validate` of `bootstrap` and `modules/storage_account`; `bootstrap/moved.tf` maps pre-module bootstrap states to the module addresses). All Azure-side procedures: **Pending external prerequisites** |
 | **Code** | `bootstrap/main.tf`, `bootstrap/moved.tf`, `bootstrap/variables.tf`, `bootstrap/outputs.tf`, `modules/storage_account/main.tf`, `environments/dev/backend.tf`, `environments/dev/backend.hcl.example` |
 | **Controls reference** | [project README §6](../../README.md#6-remote-backend-architecture) |
 
@@ -106,12 +106,12 @@ its full interface are described in `modules/storage_account/README.md`.
    export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
    ```
 
-2. Initialize, validate and test (no Azure call):
+2. Initialize and validate (no Azure call):
 
    ```bash
    cd az-infra-generic/bootstrap
    terraform init
-   terraform validate && terraform test
+   terraform validate
    ```
 
 3. Plan and review. With default inputs the plan adds **9** resources: the

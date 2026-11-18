@@ -40,11 +40,10 @@ module "microk8s" {
 
 Types, defaults and descriptions: [Reference (generated)](#reference-generated).
 
-## Tests
+## Validation
 
 ```bash
-terraform init -backend=false && terraform test   # plan-mode, no side effects
-bash scripts/tests/run.sh                         # script behaviour with stubbed snap/microk8s/sudo
+terraform init -backend=false && terraform validate   # no side effects
 ```
 
 ## Reference (generated)

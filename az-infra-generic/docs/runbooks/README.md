@@ -30,7 +30,7 @@ recover the infrastructure without prior knowledge of the project.
 
 | Status | Meaning |
 |---|---|
-| **Validated** | Executed successfully during development (offline checks: `terraform validate`, `terraform test` with mocked providers, scripts) |
+| **Validated** | Executed successfully during development (offline checks: `terraform fmt`/`validate`, linters and scanners, scripts) |
 | **Implemented** | Supported by the code; not yet executed end to end |
 | **Pending external prerequisites** | Requires Azure access or GitHub configuration that does not exist yet |
 | **Not implemented** | Not supported by the code; do not attempt |

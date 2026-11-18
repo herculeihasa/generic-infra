@@ -3,8 +3,8 @@
 # -----------------------------------------------------------------------------
 # Shared helpers for the microk8s module scripts. Sourced, never executed.
 #
-# Every system path is overridable through environment variables so that the
-# scripts can be tested with stubs on any machine (see tests/run.sh).
+# Every system path (/proc files, lock directory) is overridable through an
+# environment variable.
 # -----------------------------------------------------------------------------
 
 set -Eeuo pipefail
