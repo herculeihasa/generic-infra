@@ -177,11 +177,12 @@ variable "network_rules" {
     error_message = "network_rules.bypass must contain AzureServices, Logging and/or Metrics, or None alone."
   }
 
+  # try(): a bare address has no prefix (Terraform < 1.12 does not
+  # short-circuit && / ||, so every operand must evaluate safely). Comments stay
+  # outside expressions: Checkov's HCL parser rejects them there.
   validation {
     condition = alltrue([
       for ip in var.network_rules.ip_rules :
-      # try(): a bare address has no prefix (Terraform < 1.12 does not
-      # short-circuit && / ||, so every operand must evaluate safely).
       can(cidrhost(strcontains(ip, "/") ? ip : "${ip}/32", 0)) && try(tonumber(split("/", ip)[1]), 0) <= 30
     ])
     error_message = "network_rules.ip_rules must be IPv4 addresses or CIDR ranges with a prefix of /30 or shorter (Azure rejects /31 and /32: use the bare address)."
