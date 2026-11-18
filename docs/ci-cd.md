@@ -221,7 +221,9 @@ ID in any `.tf`; each deployable root uses the `azurerm` backend with
 `use_azuread_auth = true`, the `tfstate-<environment>` container, a state
 key and no `storage_account_name` in `backend.tf`; `backend.hcl` (when
 committed) contains only `storage_account_name`; `azurerm` is locked for the
-four platforms; the bootstrap creates the environment's state container.
+four platforms; the bootstrap creates the environment's state container and
+declares no `backend`/`cloud` block (it creates the backend, so its own state
+stays local).
 
 **Azure stages are disabled until configured.** The `azure-readiness` job
 only lets plan/apply run when the repository variable

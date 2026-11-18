@@ -147,6 +147,14 @@ def azure_config_problems(project: str, repo_root: Path = REPO_ROOT) -> list[str
             if re.search(pattern, text, re.M):
                 problems.append(f"{tf.relative_to(repo_root).as_posix()}: {label} must not be set in code")
 
+    # The bootstrap creates the remote backend: it must never store its own
+    # state in it (or in any remote backend), so it stays usable when the
+    # backend is misconfigured, unreachable or being rebuilt.
+    for tf in sorted((project_dir / "bootstrap").glob("*.tf")):
+        if re.search(r'^\s*(backend\s+"[^"]*"|cloud)\s*\{', strip_hcl_comments(tf.read_text(encoding="utf-8")), re.M):
+            problems.append(f"{tf.relative_to(repo_root).as_posix()}: the bootstrap creates the backend and must keep "
+                            "local state (no backend or cloud block)")
+
     bootstrap_vars = strip_hcl_comments((project_dir / "bootstrap" / "variables.tf").read_text(encoding="utf-8"))
     env_block = re.search(r'variable "environments"\s*\{.*?default\s*=\s*\[(.*?)\]', bootstrap_vars, re.S)
     bootstrap_envs = set(re.findall(r'"([^"]+)"', env_block.group(1))) if env_block else set()
