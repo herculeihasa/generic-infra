@@ -1,0 +1,45 @@
+# =============================================================================
+# pre-commit framework for generic-infra (az-infra-generic + tp-local)
+#
+#   pre-commit install                      # once per clone (commit + push hooks)
+#   pre-commit run --all-files              # commit-stage hooks on every file
+#   pre-commit run --hook-stage manual --all-files   # push + manual (heavy) hooks
+#
+# Stages (see docs/pre-commit.md):
+#   pre-commit  fast, offline after the first install, run on staged files
+#   pre-push    Terraform validation and lint on the pushed changes
+#   manual      tests and security scans (also run by CI)
+#
+# Every remote hook repository is pinned to a release tag; the tool versions
+# shared with CI (gitleaks, actionlint) must match ci/tool-versions.env
+# (checked by ci/tests/test_precommit.py).
+# =============================================================================
+
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit, manual]
+
+repos:
+  # ---------------------------------------------------------------------------
+  # General repository hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        # LF everywhere (.gitattributes); PowerShell scripts are CRLF on purpose.
+        args: [--fix=lf]
+        exclude: \.ps1$
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-case-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key

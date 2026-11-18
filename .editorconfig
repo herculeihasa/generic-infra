@@ -1,0 +1,22 @@
+# Editor defaults matching the repository conventions (.gitattributes,
+# terraform fmt, the pre-commit hygiene hooks). https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Two trailing spaces are a Markdown line break (kept by the pre-commit hook).
+trim_trailing_whitespace = false
+
+[*.py]
+indent_size = 4
+
+[*.ps1]
+end_of_line = crlf
+indent_size = 4
