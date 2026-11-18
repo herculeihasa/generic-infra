@@ -9,6 +9,10 @@ layer ready for DevOps experiments.
 > yet been executed on a real WSL instance: the authoring machine had no WSL
 > distribution. See [§11](#11-known-limitations).
 
+Operational procedures (WSL setup, MicroK8s, Terraform, Kubernetes and
+Helm, CI/CD, troubleshooting and recovery, maintenance) are in the
+[runbooks](docs/runbooks/README.md); this README stays the reference.
+
 ## Contents
 
 1. [Architecture](#1-architecture)

@@ -24,6 +24,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-01 `terraform init` fails
 
+**Status:** Implemented (diagnosis derived from Terraform behaviour; not reproduced).
+
 * **Symptoms:** `Failed to query available provider packages`,
   `Provider dependency changes detected`, `the cached package ... does not match`.
 * **Causes:** no access to `registry.terraform.io`; lock file inconsistent
@@ -37,6 +39,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 * Backend-specific errors: T-03.
 
 ## T-02 Provider authentication errors
+
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
 
 * **Symptoms:** `building account: ... subscription ID could not be determined`,
   `AADSTS700016`, `AADSTS70021: No matching federated identity record found`,
@@ -61,6 +65,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-03 Backend connectivity or authorization
 
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
+
 * **Symptoms:** `AuthorizationPermissionMismatch`, `This request is not authorized to perform this operation`,
   `KeyBasedAuthenticationNotPermitted`, `no such host`.
 * **Causes:** missing/propagating *Storage Blob Data* role; IP filtering;
@@ -78,6 +84,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-04 State locked
 
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
+
 * **Symptoms:** `Error acquiring the state lock ... state blob is already locked`.
 * **Causes:** concurrent run; interrupted run (killed process, cancelled job).
 * **Diagnostics:** the `Lock Info` (ID, Who, Created); `gh run list --workflow az-infra-generic.yml --status in_progress`.
@@ -86,6 +94,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 * **Verification:** a new `terraform plan` acquires the lock.
 
 ## T-05 Resource naming conflicts
+
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
 
 * **Symptoms:** `StorageAccountAlreadyTaken`; `A resource with the ID "..." already exists - to be managed via Terraform this resource needs to be imported`.
 * **Causes:** global name collision (storage account); a resource created
@@ -98,6 +108,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-06 Azure permission errors
 
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
+
 * **Symptoms:** `AuthorizationFailed ... does not have authorization to perform action 'Microsoft.Authorization/roleAssignments/write'`;
   `LinkedAuthorizationFailed ... 'Microsoft.Network/virtualNetworks/subnets/join/action'`.
 * **Causes:** deploying identity lacks *Role Based Access Control
@@ -108,6 +120,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 * **Escalation:** subscription owner / governance team for policy exemptions.
 
 ## T-07 AKS cluster provisioning fails
+
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
 
 * **Symptoms:** apply fails on `module.aks.azurerm_kubernetes_cluster.this`
   (`QuotaExceeded`, `ZonalAllocationFailed`, `SkuNotAvailable`,
@@ -130,6 +144,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-08 Node pool provisioning fails
 
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
+
 * **Symptoms:** apply fails on `azurerm_kubernetes_cluster_node_pool.this["<pool>"]`
   or the system pool; pods `Pending` with `Insufficient cpu`.
 * **Causes:** quota; Spot capacity unavailable; ephemeral OS disk larger than
@@ -149,6 +165,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 * **Verification:** pool `Succeeded`; pods scheduled.
 
 ## T-09 Networking issues
+
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
 
 * **Symptoms:** pods cannot reach the internet or Azure services; nodes
   `NotReady`; `Invalid value for variable` on `network` at plan time.
@@ -173,6 +191,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-10 Kubernetes API access fails
 
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
+
 * **Symptoms:** `kubectl` → `Forbidden`, `You must be logged in`,
   `Unable to connect to the server: dial tcp ... i/o timeout`.
 * **Causes:** no Azure RBAC role / admin group; kubeconfig not converted for
@@ -194,6 +214,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 
 ## T-11 No data in Container Insights
 
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
+
 * **Symptoms:** empty Container Insights views; no rows in `ContainerLogV2`.
 * **Causes:** missing data collection rule association; workspace in another
   region than the rule (`monitoring.data_collection_rule_location`); agent pods
@@ -210,6 +232,8 @@ TF_LOG=DEBUG terraform plan 2> tf-debug.log                    # last resort
 * **Verification:** rows appear in `KubePodInventory` within about 10 minutes.
 
 ## T-12 Pipeline failures
+
+**Status:** Pending external prerequisites (derived from the implementation; not reproduced against Azure).
 
 See [06 CI-09](06-cicd-operations.md#ci-09-investigate-a-failed-run) and
 [docs/ci-cd.md §12](../../../docs/ci-cd.md#12-troubleshooting).

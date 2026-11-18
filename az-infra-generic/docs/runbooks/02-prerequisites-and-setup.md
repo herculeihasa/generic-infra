@@ -183,8 +183,8 @@ Otherwise request a quota increase or change `vm_size` / `zones` in
 
 ## SETUP-08 Initialize the configurations
 
-**Status:** offline initialization **Validated**; backend initialization
-pending ([03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend)).
+**Status:** Validated (offline initialization); backend initialization
+Pending external prerequisites ([03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend)).
 
 **Purpose:** download the locked providers and modules to validate and test
 without Azure access. **Context:** repository root.

@@ -80,9 +80,10 @@ replacements.
 
 ## SEC-05 Version the AKS module
 
-**Status:** Partially implemented. Inside this repository the module is
-consumed by relative path (`../../modules/aks`): it always moves with its
-callers. For other repositories, **Planned**:
+**Status:** Implemented inside this repository; Planned for other
+repositories. Inside this repository the module is consumed by relative
+path (`../../modules/aks`): it always moves with its callers. For other
+repositories (planned):
 
 * tag releases `aks-module/vMAJOR.MINOR.PATCH` (semantic versioning: removed
   or renamed input, changed default with replacement impact → major; new

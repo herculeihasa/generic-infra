@@ -8,6 +8,10 @@ Service (AKS) module**, with remote state in **Azure Blob Storage**.
 > run (see [§12](#12-validation-commands)); what remains is listed in
 > [§14](#14-known-limitations-and-pending-azure-dependent-validation).
 
+Operational procedures (setup, backend and state, deployments, CI/CD,
+troubleshooting and recovery, security and maintenance) are in the
+[runbooks](docs/runbooks/README.md); this README stays the reference.
+
 ## Contents
 
 1. [Project overview](#1-project-overview)
