@@ -167,7 +167,7 @@ download, add-on images).
 **Troubleshooting:** `root privileges are required … Run 'sudo -v'` → the
 cached credentials expired: `sudo -v` and run `terraform plan`/`apply` again
 (steps already done are kept and every script is idempotent). Other errors:
-07 Troubleshooting and recovery.
+[07 T-03](07-troubleshooting-and-recovery.md#t-03-microk8s-installation-and-channel-changes).
 
 ## SET-08 Activate the `microk8s` group membership
 

@@ -108,7 +108,7 @@ practice bindings are used with service accounts.
 
 ## K8S-04 Manage other Kubernetes resources
 
-**Status:** Not managed by Terraform (by design).
+**Status:** Pending external prerequisites (outside Terraform by design).
 
 Workloads that are not Helm releases of `helm_releases` are deployed with
 `kubectl` into a managed namespace, which applies its quota, limits, Pod

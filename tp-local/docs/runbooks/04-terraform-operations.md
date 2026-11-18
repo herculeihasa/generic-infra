@@ -158,8 +158,8 @@ ls -l ~/.local/state/tp-local/        # *.tfstate and *.tfstate.backup (previous
 
 The stage 1 state only holds step inputs (paths, flags); the stage 2 state
 holds Kubernetes object specifications and Helm values. Neither contains the
-kubeconfig. Backups and recovery: 07 Troubleshooting and recovery, 08
-Maintenance and lifecycle.
+kubeconfig. Backups and recovery: [07 R-03](07-troubleshooting-and-recovery.md#r-03-restore-a-terraform-state-from-its-backup),
+[08 MNT-07](08-maintenance-and-lifecycle.md#mnt-07-back-up-the-environment).
 
 ## TF-08 Re-run a provisioning step
 
@@ -190,7 +190,7 @@ change on the host, force the relevant step:
 
 | Variable | Default | Runbook |
 |---|---|---|
-| `microk8s_channel` | `1.35/stable` | 08 Maintenance and lifecycle (upgrade) |
+| `microk8s_channel` | `1.35/stable` | [08 MNT-01](08-maintenance-and-lifecycle.md#mnt-01-upgrade-microk8s-kubernetes-minor-version) |
 | `addons` | dns, rbac, hostpath-storage, metrics-server, ingress | [03 MK-08](03-microk8s-operations.md#mk-08-manage-add-ons) |
 | `kubeconfig_path` | `~/.kube/tp-local-microk8s.yaml` | Keep `environments/dev` `kubeconfig_path` identical |
 | `api_server_address` | `127.0.0.1` | — |

@@ -69,11 +69,12 @@ tp-local/scripts/verify-cluster.sh
 **Rollback (not validated):** Kubernetes does not support minor-version
 downgrades. Options: `sudo snap revert microk8s` (previous snap revision),
 then set `microk8s_channel` back; or recreate the cluster and restore from
-backup (07 R-06, MNT-08).
+backup ([07 R-06](07-troubleshooting-and-recovery.md#r-06-recreate-the-cluster-reinstall-microk8s), MNT-08).
 
 ## MNT-02 Control automatic snap refreshes
 
-**Status:** Not implemented by the code (host setting, operator choice).
+**Status:** Pending external prerequisites (host setting, not managed by
+the code).
 
 snapd refreshes MicroK8s automatically within the tracked channel (patch
 releases of the same minor version), which restarts its services. Inspect
@@ -139,7 +140,7 @@ cd tp-local/environments/dev && terraform plan     # expected: no changes
 
 The pipeline initializes with `-lockfile=readonly`: the updated lock file
 must be committed. **Rollback:** revert the commit and initialize again; if
-the newer provider already wrote the state, restore the state backup (07 R-03).
+the newer provider already wrote the state, restore the state backup ([07 R-03](07-troubleshooting-and-recovery.md#r-03-restore-a-terraform-state-from-its-backup)).
 
 ## MNT-05 Update the add-ons
 
@@ -172,10 +173,10 @@ Read the chart changelog, then bump `version` in `terraform.tfvars`:
 
 | Item | Location | Back up? |
 |---|---|---|
-| Terraform state, both stages | `~/.local/state/tp-local/` | **Yes**: without it, recovery needs imports (07 R-04) |
+| Terraform state, both stages | `~/.local/state/tp-local/` | **Yes**: without it, recovery needs imports ([07 R-04](07-troubleshooting-and-recovery.md#r-04-rebuild-a-lost-stage-2-state-import)) |
 | Application volume data | `/var/snap/microk8s/common/default-storage` (one directory per volume) | Yes, if workloads hold data |
 | Objects created outside Terraform ([05 K8S-04](05-kubernetes-and-helm.md#k8s-04-manage-other-kubernetes-resources)) | Cluster | Keep their manifests in Git |
-| Kubeconfig | `~/.kube/tp-local-microk8s.yaml` | **No**: cluster-admin credential, re-exported by 07 R-02 |
+| Kubeconfig | `~/.kube/tp-local-microk8s.yaml` | **No**: cluster-admin credential, re-exported by [07 R-02](07-troubleshooting-and-recovery.md#r-02-regain-cluster-access) |
 | Code, tfvars | Git | Push |
 
 ```bash
@@ -206,7 +207,7 @@ wsl --export Ubuntu-24.04 "<backup-folder>\ubuntu-24.04-tp-local.tar"
 
 | What | Procedure |
 |---|---|
-| A state file | Copy the current file aside, extract the archive (`tar -xzf <archive> -C ~/.local/state`), then `terraform plan` (same rules as 07 R-03) |
+| A state file | Copy the current file aside, extract the archive (`tar -xzf <archive> -C ~/.local/state`), then `terraform plan` (same rules as [07 R-03](07-troubleshooting-and-recovery.md#r-03-restore-a-terraform-state-from-its-backup)) |
 | Volume data, same cluster | Workloads stopped, `sudo tar -xzf <archive> -C /var/snap/microk8s/common` |
 | Volume data, recreated cluster | New volumes have new directories: copy the data into the path given by `kubectl get pv <pv> -o jsonpath='{.spec.hostPath.path}'` |
 | Whole distribution | PowerShell: `wsl --import Ubuntu-24.04 "<install-folder>" "<backup-folder>\ubuntu-24.04-tp-local.tar" --version 2` (after `wsl --unregister` of the broken one). An imported distribution logs in as root: set `[user] default=<linux-user>` in `/etc/wsl.conf`, then `wsl --shutdown` |

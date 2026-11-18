@@ -237,8 +237,8 @@ The cluster, state and kubeconfig are not affected.
 Pipeline symptoms (skipped local stages, queued jobs, refused applies,
 `sudo -v` on the runner):
 [CI/CD §12](../../../docs/ci-cd.md#12-troubleshooting). Cluster symptoms
-reported by the preflight, plan or integration jobs: 07 Troubleshooting and
-recovery.
+reported by the preflight, plan or integration jobs:
+[07 Troubleshooting and recovery](07-troubleshooting-and-recovery.md).
 
 ## References
 

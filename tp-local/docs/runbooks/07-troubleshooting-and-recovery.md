@@ -195,7 +195,8 @@ sudo microk8s inspect                      # (sudo) full report; attach its arch
 
 ## T-13 Pipeline
 
-**Status:** see [06](06-cicd-and-deployment.md). Pipeline-level symptoms (local stages
+**Status:** Pending external prerequisites (the pipeline has not run on
+GitHub Actions yet). See [06](06-cicd-and-deployment.md). Pipeline-level symptoms (local stages
 skipped, runner offline, refused applies):
 [CI/CD §12](../../../docs/ci-cd.md#12-troubleshooting). Failures inside the
 preflight, plan or integration jobs: the sections above, using the job log.

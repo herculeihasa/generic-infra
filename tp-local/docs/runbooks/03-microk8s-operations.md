@@ -18,6 +18,8 @@ kubeconfig needed). Commands needing root are marked **(sudo)**.
 
 ## MK-01 Check cluster readiness
 
+**Status:** Pending external prerequisites (`wait-ready.sh` logic covered by the stubbed suite).
+
 ```bash
 microk8s status --wait-ready --timeout 60      # "microk8s is running" + add-on list
 microk8s status --format short                 # one line per add-on: core/<name>: enabled|disabled
@@ -37,6 +39,8 @@ Expected: `cluster and add-ons are ready`. Complete post-deployment check:
 
 ## MK-02 Check MicroK8s services
 
+**Status:** Pending external prerequisites.
+
 ```bash
 snap services microk8s                                     # daemons and their state
 systemctl status snap.microk8s.daemon-kubelite --no-pager  # API server, scheduler, controllers, kubelet
@@ -50,6 +54,8 @@ configured `microk8s_channel`).
 
 ## MK-03 Inspect nodes
 
+**Status:** Pending external prerequisites.
+
 ```bash
 kubectl get nodes -o wide                       # name (WSL hostname), IP, OS image, runtime
 kubectl describe node "$(hostname | tr '[:upper:]' '[:lower:]')"
@@ -59,6 +65,8 @@ kubectl get nodes --show-labels | grep tp-local/role      # label set by stage 2
 
 ## MK-04 Inspect pods and events
 
+**Status:** Pending external prerequisites.
+
 ```bash
 kubectl get pods -A -o wide
 kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded
@@ -67,6 +75,8 @@ kubectl get events -A --sort-by=.lastTimestamp | tail -30
 ```
 
 ## MK-05 View logs
+
+**Status:** Pending external prerequisites.
 
 ```bash
 kubectl logs "<pod>" -n "<namespace>" [--previous]           # container logs
@@ -80,6 +90,8 @@ printed at the end) to attach to an escalation.
 
 ## MK-06 Stop and start the cluster
 
+**Status:** Pending external prerequisites.
+
 ```bash
 microk8s stop     # stops every MicroK8s service (frees CPU/RAM); may ask for sudo depending on the release
 microk8s start
@@ -92,6 +104,8 @@ their own; nothing is lost (data lives under `/var/snap/microk8s`).
 
 ## MK-07 Restart services
 
+**Status:** Pending external prerequisites.
+
 ```bash
 sudo snap restart microk8s                          # (sudo) all MicroK8s services
 sudo snap restart microk8s.daemon-kubelite          # (sudo) control plane + kubelet only
@@ -99,6 +113,8 @@ microk8s status --wait-ready --timeout 300
 ```
 
 ## MK-08 Manage add-ons
+
+**Status:** Implemented (Terraform path; plan behaviour validated offline); Pending external prerequisites.
 
 **Preferred (Terraform):** edit the `addons` map of stage 1 and apply.
 
@@ -132,6 +148,8 @@ terraform apply -replace='module.microk8s.terraform_data.addon["<name>"]'
 
 ## MK-09 DNS (CoreDNS)
 
+**Status:** Pending external prerequisites.
+
 ```bash
 kubectl -n kube-system get pods -l k8s-app=kube-dns
 kubectl run dnstest -n sandbox --rm -it --restart=Never --image=busybox:1.36 -- \
@@ -145,6 +163,8 @@ accepted syntax depends on the MicroK8s release: check
 
 ## MK-10 Storage (hostpath)
 
+**Status:** Pending external prerequisites.
+
 ```bash
 kubectl get storageclass         # microk8s-hostpath (default), microk8s-hostpath-retain
 kubectl get pv,pvc -A
@@ -156,6 +176,8 @@ sudo ls /var/snap/microk8s/common/default-storage     # (sudo) volume data on th
 (clean it manually). Volumes are local to the WSL virtual disk.
 
 ## MK-11 Ingress
+
+**Status:** Pending external prerequisites.
 
 ```bash
 kubectl -n ingress get daemonset,pods
@@ -169,6 +191,8 @@ containing `"hostname"`.
 
 ## MK-12 Metrics Server
 
+**Status:** Pending external prerequisites.
+
 ```bash
 kubectl -n kube-system get deployment metrics-server
 kubectl top nodes
@@ -180,12 +204,15 @@ minutes.
 
 ## MK-13 Local registry
 
-**Status:** Not enabled by default. Enable it through MK-08
+**Status:** Implemented as an opt-in (not enabled by default); Pending
+external prerequisites. Enable it through MK-08
 (`registry = { args = ["--size", "20Gi"] }`), then push images to
 `localhost:32000/<image>:<tag>` and reference them in workloads.
 It depends on `hostpath-storage`.
 
 ## MK-14 Kubernetes API access
+
+**Status:** Pending external prerequisites.
 
 | Access path | Command | Needs |
 |---|---|---|
