@@ -12,7 +12,7 @@
 #
 # Every remote hook repository is pinned to a release tag; the tool versions
 # shared with CI (gitleaks, actionlint) must match ci/tool-versions.env
-# (checked by ci/tests/test_precommit.py).
+# (checked by `ci/scripts/check-repo.py precommit`).
 # =============================================================================
 
 minimum_pre_commit_version: "4.0.0"
@@ -156,9 +156,9 @@ repos:
 
   # ---------------------------------------------------------------------------
   # Markdown quality (commit): style rules (markdownlint, .markdownlint-cli2.yaml)
-  # and documentation consistency (ci/tests/test_docs.py: relative links and
-  # anchors, Mermaid syntax, referenced files and Terraform addresses in
-  # runbooks, runbook structure).
+  # and documentation consistency (`ci/scripts/check-repo.py docs`: relative
+  # links and anchors, Mermaid syntax, referenced files and Terraform
+  # addresses in runbooks, runbook structure).
   # ---------------------------------------------------------------------------
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.24.0
@@ -168,8 +168,8 @@ repos:
   - repo: local
     hooks:
       - id: docs-consistency
-        name: documentation links, anchors, references, Mermaid (test_docs.py)
-        entry: python ci/tests/test_docs.py
+        name: documentation links, anchors, references, Mermaid (check-repo.py docs)
+        entry: python ci/scripts/check-repo.py docs
         language: python
         files: \.(md|tf)$
         pass_filenames: false
@@ -202,8 +202,9 @@ repos:
         stages: [manual]
 
   # ---------------------------------------------------------------------------
-  # GitHub Actions workflows (commit; .github/actionlint.yaml) and the CI
-  # unit tests (push: helpers, workflow and security policy tests, docs).
+  # GitHub Actions workflows (commit; .github/actionlint.yaml) and the
+  # repository policy checks (push: workflows, security tooling, pre-commit,
+  # docs; ci/scripts/check-repo.py).
   # ---------------------------------------------------------------------------
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
@@ -212,9 +213,9 @@ repos:
 
   - repo: local
     hooks:
-      - id: ci-unit-tests
-        name: CI unit tests (ci/tests)
-        entry: python -m unittest discover -s ci/tests
+      - id: repo-policy
+        name: repository policy checks (ci/scripts/check-repo.py)
+        entry: python ci/scripts/check-repo.py
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         files: ^(ci/|\.github/|[^/]+/(bootstrap|environments|modules)/|\.pre-commit-config\.yaml$|\.gitleaks\.toml$|(.+/)?\.checkov[^/]*\.yaml$|.+/\.trivyignore\.yaml$|.+\.md$)

@@ -1,7 +1,7 @@
 # Reusable workflow: quality gates (stages 1-2) for one Terraform project.
 # Called by the per-project workflows; see docs/ci-cd.md.
 #
-# Conventions enforced by ci/tests/test_workflows.py:
+# Conventions enforced by `ci/scripts/check-repo.py workflows`:
 # - actions pinned by full commit SHA;
 # - no ${{ }} expression inside `run:` scripts (values go through `env:`);
 # - checkout never persists credentials.

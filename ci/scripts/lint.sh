@@ -4,7 +4,7 @@
 #
 #   ci/scripts/lint.sh <project> tflint      # TFLint, failure at severity >= warning
 #   ci/scripts/lint.sh <project> shell       # ShellCheck on the project's scripts
-#   ci/scripts/lint.sh repo workflows        # actionlint on .github/workflows + CI unit tests
+#   ci/scripts/lint.sh repo workflows        # actionlint on .github/workflows + repository policy checks
 # -----------------------------------------------------------------------------
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -60,10 +60,10 @@ run_workflow_lint() {
   ci_group "actionlint (.github/workflows)"
   (cd "$CI_REPO_ROOT" && actionlint -color) || ci_die "actionlint reported issues"
   ci_endgroup
-  ci_group "CI unit tests (ci/tests)"
-  (cd "$CI_REPO_ROOT" && python3 -m unittest discover -s ci/tests) || ci_die "CI unit tests failed"
+  ci_group "repository policy checks (ci/scripts/check-repo.py)"
+  python3 "${CI_REPO_ROOT}/ci/scripts/check-repo.py" || ci_die "repository policy checks failed"
   ci_endgroup
-  ci_summary "- ✅ actionlint + CI unit tests"
+  ci_summary "- ✅ actionlint + repository policy checks"
 }
 
 case "$action" in

@@ -4,7 +4,7 @@
 # Every rule is on except the ones below, relaxed on purpose for technical
 # documentation (wide tables, commands, procedure templates). Structural
 # checks that markdownlint cannot do (links, anchors, Mermaid, references to
-# files and Terraform addresses) are in ci/tests/test_docs.py.
+# files and Terraform addresses) are in `ci/scripts/check-repo.py docs`.
 config:
   default: true
 

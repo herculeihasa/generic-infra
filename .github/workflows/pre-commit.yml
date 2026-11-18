@@ -6,7 +6,7 @@
 # Terraform validation, TFLint, tests and security scans are NOT repeated
 # here: the per-project pipelines run them (_terraform-quality.yml).
 #
-# Conventions enforced by ci/tests/test_workflows.py: actions pinned by commit
+# Conventions enforced by `ci/scripts/check-repo.py workflows`: actions pinned by commit
 # SHA, no ${{ }} in run scripts, checkout without persisted credentials.
 name: pre-commit
 

@@ -47,10 +47,10 @@ else
   skip "shellcheck" shellcheck
 fi
 if command -v actionlint >/dev/null 2>&1; then
-  gate "actionlint + CI unit tests" bash "${scripts_dir}/lint.sh" repo workflows
+  gate "actionlint + repository policy checks" bash "${scripts_dir}/lint.sh" repo workflows
 else
   skip "actionlint" actionlint
-  gate "CI unit tests" bash -c "cd '${CI_REPO_ROOT}' && python3 -m unittest discover -s ci/tests"
+  gate "repository policy checks" python3 "${scripts_dir}/check-repo.py"
 fi
 
 # Stage 3 (security) is added by ci/scripts/security-scan.sh when present.
