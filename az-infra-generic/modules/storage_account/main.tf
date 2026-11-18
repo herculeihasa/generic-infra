@@ -20,10 +20,10 @@ resource "azurerm_storage_account" "this" {
   location            = var.location
   tags                = local.tags
 
-  account_kind             = "StorageV2"
-  account_tier             = "Standard"
-  account_replication_type = "ZRS"
-  access_tier              = "Hot"
+  account_kind             = var.account_kind
+  account_tier             = var.account_tier
+  account_replication_type = var.account_replication_type
+  access_tier              = local.access_tier
 
   # --- Authentication: Microsoft Entra ID only --------------------------------
   shared_access_key_enabled       = false # no account keys, no key-based SAS
@@ -32,6 +32,9 @@ resource "azurerm_storage_account" "this" {
   sftp_enabled                    = false
 
   # --- Transport and exposure ---------------------------------------------------
+  # Not configurable: secure transfer is always required, and TLS1_2 is the
+  # only minimum version Azure Storage and azurerm 5.x accept (TLS 1.0/1.1 are
+  # retired). Expose a variable once a higher minimum becomes available.
   https_traffic_only_enabled       = true
   min_tls_version                  = "TLS1_2"
   allow_nested_items_to_be_public  = false
