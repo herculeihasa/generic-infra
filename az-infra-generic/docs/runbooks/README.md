@@ -45,9 +45,9 @@ recover the infrastructure without prior knowledge of the project.
 | 03 | [Backend and state management](03-backend-and-state-management.md) | State bootstrap, locking, isolation, inspection, backup, recovery, migration |
 | 04 | [AKS module operations](04-aks-module-operations.md) | Module interface, create, update, scale, upgrade, access, destroy |
 | 05 | [Deployment procedures](05-deployment-procedures.md) | Full Terraform lifecycle, local and pipeline execution |
-| 06 | CI/CD operations (in progress) | Pipeline stages, gates, approvals, Azure authentication, troubleshooting |
-| 07 | Troubleshooting and recovery (in progress) | Diagnosis and resolution by symptom, rollback, partial deployments |
-| 08 | Security and maintenance (in progress) | Credentials, upgrades, versioning, scanning, access reviews, drift |
+| 06 | [CI/CD operations](06-cicd-operations.md) | Pipeline stages, gates, approvals, Azure authentication, troubleshooting |
+| 07 | [Troubleshooting and recovery](07-troubleshooting-and-recovery.md) | Diagnosis and resolution by symptom, rollback, partial deployments |
+| 08 | [Security and maintenance](08-security-and-maintenance.md) | Credentials, upgrades, versioning, scanning, access reviews, drift |
 
 ## Environment reference
 
@@ -90,3 +90,11 @@ exist after deployment are placeholders.
 | Get kubectl access | [04 AKS-07](04-aks-module-operations.md#aks-07-configure-kubernetes-access) |
 | Grant cluster access | [04 AKS-08](04-aks-module-operations.md#aks-08-grant-or-revoke-kubernetes-access) |
 | Destroy dev | [05 DEP-10](05-deployment-procedures.md#dep-10-destroy-the-environment) |
+| Know which checks block a deployment | [06 §2](06-cicd-operations.md#2-checks-that-must-pass-before-a-deployment-is-authorized) |
+| Turn on the Azure pipeline stages | [06 CI-01](06-cicd-operations.md#ci-01-enable-the-azure-stages-one-time) |
+| Deploy through the pipeline / approve | [06 CI-03..05](06-cicd-operations.md#ci-03-deploy-dev) |
+| Authorize a deletion in the pipeline | [06 CI-06](06-cicd-operations.md#ci-06-authorize-a-destructive-change) |
+| Diagnose an error message | [07 Troubleshooting and recovery](07-troubleshooting-and-recovery.md) |
+| Recover from a failed apply | [07 R-01](07-troubleshooting-and-recovery.md#r-01-recover-from-a-failed-or-partial-apply) |
+| Upgrade Terraform or the provider | [08 SEC-03 / SEC-04](08-security-and-maintenance.md#sec-04-upgrade-the-azurerm-provider) |
+| Plan recurring maintenance | [08 §2](08-security-and-maintenance.md#2-maintenance-calendar) |
