@@ -191,7 +191,7 @@ ls -ld ~/.kube && ls -l ~/.kube/tp-local-microk8s.yaml   # drwx------ / -rw-----
 |---|---|---|
 | WSL networking | NAT, localhost forwarding from Windows to WSL | None |
 | API server | `https://127.0.0.1:16443` in the kubeconfig (stable across WSL IP changes) | None |
-| Ingress (ports 80/443) | hostPort on the WSL IP, not on Windows `localhost` | Use `hostname -I` in WSL, or port-forward (05 Kubernetes and Helm) |
+| Ingress (ports 80/443) | hostPort on the WSL IP, not on Windows `localhost` | Use `hostname -I` in WSL, or port-forward ([05 K8S-10](05-kubernetes-and-helm.md#k8s-10-check-deployment-health)) |
 | VPN / corporate DNS | May break name resolution in WSL | Fix `/etc/resolv.conf` handling (`[network] generateResolvConf` in `/etc/wsl.conf`) |
 | Mirrored networking (`networkingMode=mirrored`) | Not configured by this project | Not validated with MicroK8s; keep NAT unless needed |
 
@@ -244,7 +244,7 @@ cd ~/src/azure-infra && tp-local/scripts/verify-cluster.sh
 **Expected result:** `verify-cluster: all checks passed` (kubeconfig mode,
 API `/readyz`, node Ready, the five add-ons, namespaces `apps` and `sandbox`,
 Helm release `podinfo` deployed, podinfo answering through the ingress).
-Details of the stage 2 plan: 04 Terraform operations.
+Details of the stage 2 plan: [04 TF-05](04-terraform-operations.md#tf-05-plan-and-apply-stage-2).
 
 ## Setup checklist
 

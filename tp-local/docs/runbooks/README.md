@@ -46,8 +46,8 @@ environment on a Windows workstation.
 | 01 | [Architecture](01-architecture.md) | Windows/WSL/MicroK8s/Terraform/Kubernetes/Helm layers, state, kubeconfig, add-ons, ownership |
 | 02 | [WSL initial setup](02-wsl-initial-setup.md) | Windows prerequisites, WSL2, Ubuntu, packages, Terraform, first cluster bootstrap, access |
 | 03 | [MicroK8s operations](03-microk8s-operations.md) | Readiness, services, nodes, pods, logs, add-ons, start/stop |
-| 04 | Terraform operations (in progress) | Both stages: init, plan, apply, outputs, state, destroy, ordering |
-| 05 | Kubernetes and Helm (in progress) | Namespaces, RBAC, resources, Helm releases, health |
+| 04 | [Terraform operations](04-terraform-operations.md) | Both stages: init, plan, apply, outputs, state, destroy, ordering |
+| 05 | [Kubernetes and Helm](05-kubernetes-and-helm.md) | Namespaces, RBAC, resources, Helm releases, health |
 | 06 | CI/CD and local deployment (in progress) | Hosted vs self-hosted runner, WSL runner, approvals |
 | 07 | Troubleshooting and recovery (in progress) | Diagnosis by symptom, cluster/state recovery, rebuild |
 | 08 | Maintenance and lifecycle (in progress) | Upgrades, backups, reset, full recreation |
@@ -83,3 +83,11 @@ Values come from the code (defaults of `bootstrap/variables.tf`,
 | Look at services, pods and logs | [03 MK-02..05](03-microk8s-operations.md#mk-02-check-microk8s-services) |
 | Stop, start or restart MicroK8s | [03 MK-06 / MK-07](03-microk8s-operations.md#mk-06-stop-and-start-the-cluster) |
 | Enable or disable an add-on | [03 MK-08](03-microk8s-operations.md#mk-08-manage-add-ons) |
+| Initialize Terraform with the right state | [04 TF-01](04-terraform-operations.md#tf-01-initialize-a-root) |
+| Know what a plan will change | [04 TF-03](04-terraform-operations.md#tf-03-plan-stage-1), [TF-05](04-terraform-operations.md#tf-05-plan-and-apply-stage-2) |
+| Re-run a provisioning step (kubeconfig, add-on) | [04 TF-08](04-terraform-operations.md#tf-08-re-run-a-provisioning-step) |
+| Destroy the environment | [04 TF-10](04-terraform-operations.md#tf-10-destroy) |
+| Add a namespace or change quotas/isolation | [05 K8S-01 / K8S-02](05-kubernetes-and-helm.md#k8s-01-add-change-or-remove-a-namespace) |
+| Grant permissions to a service account | [05 K8S-03](05-kubernetes-and-helm.md#k8s-03-manage-rbac) |
+| Install, upgrade or roll back a Helm release | [05 K8S-06..08](05-kubernetes-and-helm.md#k8s-06-install-a-release) |
+| Check an application's health | [05 K8S-10](05-kubernetes-and-helm.md#k8s-10-check-deployment-health) |
