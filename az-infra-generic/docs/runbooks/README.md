@@ -43,8 +43,8 @@ recover the infrastructure without prior knowledge of the project.
 | 01 | [Architecture](01-architecture.md) | Components, diagrams, files, providers, environments, naming, lifecycle |
 | 02 | [Prerequisites and initial setup](02-prerequisites-and-setup.md) | Tools, Azure authentication, permissions, environment variables, initialization |
 | 03 | [Backend and state management](03-backend-and-state-management.md) | State bootstrap, locking, isolation, inspection, backup, recovery, migration |
-| 04 | AKS module operations (in progress) | Module interface, create, update, scale, upgrade, access, destroy |
-| 05 | Deployment procedures (in progress) | Full Terraform lifecycle, local and pipeline execution |
+| 04 | [AKS module operations](04-aks-module-operations.md) | Module interface, create, update, scale, upgrade, access, destroy |
+| 05 | [Deployment procedures](05-deployment-procedures.md) | Full Terraform lifecycle, local and pipeline execution |
 | 06 | CI/CD operations (in progress) | Pipeline stages, gates, approvals, Azure authentication, troubleshooting |
 | 07 | Troubleshooting and recovery (in progress) | Diagnosis and resolution by symptom, rollback, partial deployments |
 | 08 | Security and maintenance (in progress) | Credentials, upgrades, versioning, scanning, access reviews, drift |
@@ -82,3 +82,11 @@ exist after deployment are placeholders.
 | Connect an environment to its state | [03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend) |
 | Release a stuck state lock | [03 BS-10](03-backend-and-state-management.md#bs-10-release-a-stuck-state-lock) |
 | Restore a previous state version | [03 BS-08](03-backend-and-state-management.md#bs-08-restore-a-previous-state-version) |
+| Deploy or change dev from my workstation | [05 DEP-01..08](05-deployment-procedures.md) |
+| Review a plan for destructive changes | [05 DEP-05](05-deployment-procedures.md#dep-05-review-the-plan) |
+| Create the AKS cluster | [04 AKS-01](04-aks-module-operations.md#aks-01-create-the-cluster) |
+| Scale or add node pools | [04 AKS-03 / AKS-04](04-aks-module-operations.md#aks-03-scale-node-pools) |
+| Upgrade Kubernetes | [04 AKS-05](04-aks-module-operations.md#aks-05-upgrade-kubernetes) |
+| Get kubectl access | [04 AKS-07](04-aks-module-operations.md#aks-07-configure-kubernetes-access) |
+| Grant cluster access | [04 AKS-08](04-aks-module-operations.md#aks-08-grant-or-revoke-kubernetes-access) |
+| Destroy dev | [05 DEP-10](05-deployment-procedures.md#dep-10-destroy-the-environment) |
