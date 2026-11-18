@@ -90,7 +90,7 @@ quota ([02 SETUP-07](02-prerequisites-and-setup.md#setup-07-check-regional-capac
    `aks_admin_group_object_ids`, ideally `api_server_authorized_ip_ranges`
    and a `kubernetes_version` from
    `az aks get-versions --location francecentral -o table` (`MAJOR.MINOR`).
-2. Run the deployment lifecycle of 05 Deployment procedures (init, validate,
+2. Run the deployment lifecycle of [05 Deployment procedures](05-deployment-procedures.md) (init, validate,
    plan, apply), or the pipeline.
 
 **Expected result:** the first plan adds **12** resources (measured on the
@@ -113,7 +113,7 @@ Expected: `Succeeded`, `Running`; pools `system` (System) and `apps` (User).
 Then AKS-07 to reach the API.
 
 **Rollback:** a failed creation leaves a cluster in `Failed` state, recorded
-in state or tainted: see 07 Troubleshooting and recovery.
+in state or tainted: see [07 R-01 / R-03](07-troubleshooting-and-recovery.md#r-03-aks-cluster-in-failed-state).
 
 ## AKS-02 Update the cluster configuration
 
@@ -225,7 +225,8 @@ remove the faulty one.
 ```bash
 terraform output                                   # all non-sensitive outputs
 terraform output -raw aks_api_server_endpoint
-terraform output aks_cluster_identity aks_kubelet_identity
+terraform output aks_cluster_identity
+terraform output aks_kubelet_identity
 az aks show -g rg-azinfra-dev-frc -n aks-azinfra-dev-frc -o json \
   --query "{fqdn:fqdn, version:currentKubernetesVersion, networkPlugin:networkProfile.networkPlugin, mode:networkProfile.networkPluginMode, dataplane:networkProfile.networkDataplane, oidc:oidcIssuerProfile.issuerUrl, aad:aadProfile.enableAzureRbac, localAccounts:disableLocalAccounts}"
 ```
@@ -276,7 +277,7 @@ az role assignment create --role "Azure Kubernetes Service RBAC Writer" \
 
 Revoke by removing the object ID from tfvars (plan shows the role assignment
 or admin group change) or `az role assignment delete` for manual ones.
-Access reviews: 08 Security and maintenance.
+Access reviews: [08 SEC-08](08-security-and-maintenance.md#sec-08-review-access).
 
 ## AKS-09 Destroy AKS resources safely
 
@@ -287,7 +288,7 @@ Access reviews: 08 Security and maintenance.
 > the cluster and the AKS-managed node resource group. Export what must be
 > kept (manifests, volume data) first.
 
-* **Whole environment:** 05 Deployment procedures, DEP-10.
+* **Whole environment:** [05 DEP-10](05-deployment-procedures.md#dep-10-destroy-the-environment).
 * **Cluster only** (keeps the VNet and Log Analytics workspace), exceptional
   use of `-target`:
 
@@ -326,7 +327,7 @@ module "aks" {
 ```
 
 Pin `ref` to a commit (no release tags exist yet: module versioning is
-*Planned*, see 08 Security and maintenance). A production-like example
+*Planned*, see [08 SEC-05](08-security-and-maintenance.md#sec-05-version-the-aks-module)). A production-like example
 (private cluster, NAT egress, KMS, Defender) is in the
 [project README §10](../../README.md#10-usage-examples).
 

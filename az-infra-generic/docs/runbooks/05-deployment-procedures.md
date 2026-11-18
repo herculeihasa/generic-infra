@@ -4,7 +4,7 @@
 |---|---|
 | **Scope** | Terraform lifecycle of `environments/<env>` (dev implemented) |
 | **Status** | Offline steps (format, validate, test) **Validated**; plan/apply/verify/destroy **Pending external prerequisites** |
-| **Execution modes** | Local (this document) or pipeline (06 CI/CD operations). Production changes go through the pipeline only |
+| **Execution modes** | Local (this document) or pipeline ([06 CI/CD operations](06-cicd-operations.md)). Production changes go through the pipeline only |
 
 ## 1. Lifecycle
 
@@ -75,7 +75,7 @@ echo "exit code: $?"
 | Exit code | Meaning |
 |---|---|
 | 0 | No change |
-| 1 | Error (see the message; 07 Troubleshooting and recovery) |
+| 1 | Error (see the message; [07 Troubleshooting and recovery](07-troubleshooting-and-recovery.md)) |
 | 2 | Changes present, saved in `dev.tfplan` |
 
 `dev.tfplan` contains sensitive values: keep it local, delete it after use
@@ -119,7 +119,7 @@ confirmation. Terraform refuses it (`Saved plan is stale`) if the state
 changed since the plan: re-run DEP-04.
 
 **Expected result:** `Apply complete! Resources: N added, M changed, D destroyed.`
-matching the plan. **Rollback:** see 07 Troubleshooting and recovery (failed
+matching the plan. **Rollback:** see [07 R-01](07-troubleshooting-and-recovery.md#r-01-recover-from-a-failed-or-partial-apply) (failed
 or partial apply).
 
 ## DEP-07 Verify the deployed resources

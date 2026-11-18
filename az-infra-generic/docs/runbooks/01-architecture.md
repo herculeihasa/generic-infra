@@ -131,7 +131,7 @@ Resources created by the module, in dependency order:
 Plan-time **checks** (warnings, never blocking): `check.workload_node_pool`
 (no User pool while the system pool only accepts critical add-ons) and
 `check.cluster_admin_access` (no administrator while local accounts are
-disabled). Full interface: 04 AKS module operations and the [project README §9](../../README.md#9-aks-module-inputs-and-outputs).
+disabled). Full interface: [04 AKS module operations](04-aks-module-operations.md) and the [project README §9](../../README.md#9-aks-module-inputs-and-outputs).
 
 ## 6. Provider architecture
 
@@ -161,7 +161,7 @@ One storage account holds one private container per environment
 (`tfstate-<env>`) plus `tfstate-bootstrap`. Access is Entra ID only (Shared
 Key disabled), locking uses native blob leases, versioning and 30-day soft
 delete protect every state revision. Details and procedures:
-03 Backend and state management, and the [project README §6](../../README.md#6-remote-backend-architecture).
+[03 Backend and state management](03-backend-and-state-management.md), and the [project README §6](../../README.md#6-remote-backend-architecture).
 
 ## 9. Naming conventions
 
@@ -188,19 +188,19 @@ Tags on every resource: `project`, `environment`, `managed_by = terraform`,
 
 | Phase | Frequency | Configuration | Runbook |
 |---|---|---|---|
-| Backend bootstrap | Once per subscription | `bootstrap/` | 03 Backend and state management |
-| Environment creation | Once per environment | `environments/<env>/` | 05 Deployment procedures |
-| Configuration change | Per change (PR → plan → approval → apply) | `environments/<env>/terraform.tfvars`, module | 05 and 06 |
-| Kubernetes patch upgrades | Automatic (`patch` channel, maintenance windows) | module defaults | 04 AKS module operations |
-| Kubernetes minor upgrades | Planned change | `kubernetes_version` | 04 AKS module operations |
-| Provider / Terraform upgrades | Periodic | `versions.tf`, lock files | 08 Security and maintenance |
-| Destruction | Exceptional | `terraform destroy` with review | 05 Deployment procedures |
+| Backend bootstrap | Once per subscription | `bootstrap/` | [03 Backend and state management](03-backend-and-state-management.md) |
+| Environment creation | Once per environment | `environments/<env>/` | [05 Deployment procedures](05-deployment-procedures.md) |
+| Configuration change | Per change (PR → plan → approval → apply) | `environments/<env>/terraform.tfvars`, module | [05 Deployment procedures](05-deployment-procedures.md), [06 CI/CD operations](06-cicd-operations.md) |
+| Kubernetes patch upgrades | Automatic (`patch` channel, maintenance windows) | module defaults | [04 AKS-05](04-aks-module-operations.md#aks-05-upgrade-kubernetes) |
+| Kubernetes minor upgrades | Planned change | `kubernetes_version` | [04 AKS-05](04-aks-module-operations.md#aks-05-upgrade-kubernetes) |
+| Provider / Terraform upgrades | Periodic | `versions.tf`, lock files | [08 SEC-03 / SEC-04](08-security-and-maintenance.md#sec-03-upgrade-terraform) |
+| Destruction | Exceptional | `terraform destroy` with review | [05 DEP-10](05-deployment-procedures.md#dep-10-destroy-the-environment) |
 
 ## 11. External dependencies
 
 | Dependency | Used for | Required permissions / notes |
 |---|---|---|
-| Azure subscription | All resources | See 02 Prerequisites and initial setup |
+| Azure subscription | All resources | See [02 §2](02-prerequisites-and-setup.md#2-required-azure-permissions) |
 | Microsoft Entra ID | Authentication, AKS RBAC, admin groups | Groups for cluster administrators (object IDs) |
 | Azure resource providers | Listed in §6 | `*/register/action` or pre-registration |
 | vCPU quota (DDSv5 family) | Node pools | ≥ 6 vCPUs for dev, up to about 24 during scale-out with surge |

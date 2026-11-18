@@ -423,7 +423,7 @@ assignments scoped to them; lift it temporarily for such changes.
 | `Error acquiring the state lock` | Concurrent or interrupted run | BS-10 |
 | `Invalid character` / BOM in `backend.hcl` | UTF-16 file from Windows PowerShell 5.1 | Recreate with PowerShell 7 (BS-02) |
 
-Further diagnosis: 07 Troubleshooting and recovery.
+Further diagnosis: [07 T-03](07-troubleshooting-and-recovery.md#t-03-backend-connectivity-or-authorization).
 
 ## References
 

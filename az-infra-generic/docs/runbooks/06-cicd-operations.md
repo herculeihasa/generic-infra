@@ -231,7 +231,7 @@ Production plans are checked with the stricter `.checkov-prod.yaml`.
 **Status:** Pending external prerequisites. The weekly schedule plans dev
 without applying. A summary showing changes on an unchanged `main` means
 **drift**: someone changed Azure outside Terraform. Handle it with
-08 Security and maintenance (drift procedure).
+[08 SEC-09](08-security-and-maintenance.md#sec-09-detect-and-handle-drift).
 
 ## CI-09 Investigate a failed run
 
@@ -254,7 +254,7 @@ Identify the failing job in §2, then use the table below or
 | `TFLint / ShellCheck` | Reproduce: `ci/scripts/lint.sh az-infra-generic tflint` |
 | `security` | Read the reports; fix, or accept with justification (never lower thresholds) |
 | `Azure provider & backend checks` | Reproduce: `python3 ci/scripts/ci.py azure-config az-infra-generic` |
-| `plan dev` | Authentication / backend / quota errors: 07 Troubleshooting and recovery |
+| `plan dev` | Authentication / backend / quota errors: [07 T-02 / T-03 / T-07](07-troubleshooting-and-recovery.md#t-02-provider-authentication-errors) |
 | `apply dev` refused by the guard | Wrong branch, other commit, or destructive plan: CI-06 |
 
 ## CI-10 Run the gates locally

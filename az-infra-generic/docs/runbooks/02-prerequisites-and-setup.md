@@ -15,7 +15,7 @@
 | kubectl + kubelogin | installed by `az aks install-cli` | Cluster access with Entra ID | To access the cluster |
 | Git | any recent | Cloning, change management | Yes |
 | Python 3 | ≥ 3.11 | Local run of the pipeline gates (`ci/scripts/run-local.sh`) | Optional |
-| GitHub CLI (`gh`) | current | Pipeline operations from a terminal (06 CI/CD operations) | Optional |
+| GitHub CLI (`gh`) | current | Pipeline operations from a terminal ([06 CI/CD operations](06-cicd-operations.md)) | Optional |
 
 The modules accept Terraform `>= 1.9.0, < 2.0.0`; the root configurations
 require `~> 1.17`. Use exactly 1.17.2 to match CI and the lock files.
@@ -105,7 +105,7 @@ and credentials are taken from `az`; nothing is written to the repository.
 ## SETUP-05 Authenticate non-interactively (CI, automation)
 
 **Status:** Pending external prerequisites. Used by the pipeline
-(06 CI/CD operations). Terraform and the `azurerm`
+([06 CI/CD operations](06-cicd-operations.md)). Terraform and the `azurerm`
 backend read the same variables.
 
 | Method | Variables | Recommendation |
@@ -234,6 +234,6 @@ and the CI unit tests; scanners that are not installed are reported
 | `Unsupported Terraform Core version` | Install 1.17.2 (SETUP-01) |
 | `MissingSubscriptionRegistration` | SETUP-06 |
 | `AuthorizationFailed` on role assignments | Missing *RBAC Administrator* / *User Access Administrator* (§2) |
-| kubectl prompts for a device login or fails with `exec: kubelogin not found` | SETUP-03, then 04 AKS module operations, AKS-07 |
+| kubectl prompts for a device login or fails with `exec: kubelogin not found` | SETUP-03, then [04 AKS-07](04-aks-module-operations.md#aks-07-configure-kubernetes-access) |
 
-More: 07 Troubleshooting and recovery.
+More: [07 Troubleshooting and recovery](07-troubleshooting-and-recovery.md).
