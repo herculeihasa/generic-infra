@@ -45,6 +45,37 @@ repos:
       - id: detect-private-key
 
   # ---------------------------------------------------------------------------
+  # Secrets and sensitive files (commit). Gitleaks scans the staged changes
+  # with the repository rules (.gitleaks.toml); CI scans every new commit.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: forbid-sensitive-files
+        name: forbid state, plan, credential and kubeconfig files
+        description: Refuses files that .gitignore excludes but `git add -f` could still stage.
+        entry: >-
+          Never commit Terraform state or plans, .env files, Terraform CLI
+          credentials, kubeconfigs, private keys or secret tfvars (see
+          .gitignore and docs/pre-commit.md). Unstage the file(s) listed below.
+        language: fail
+        files: |-
+          (?x)(
+            \.tfstate(\..+)?$ | \.terraform\.tfstate\.lock\.info$ |
+            \.tfplan(\.json)?$ | (^|/)tfplan(\.json)?$ |
+            (^|/)\.env(\.[^/]+)?$ | (^|/)\.envrc$ |
+            (^|/)(\.terraformrc|terraform\.rc)$ |
+            (^|/)kubeconfig$ | \.kubeconfig$ | (^|/)[^/]*kubeconfig[^/]*\.ya?ml$ | (^|/)microk8s[^/]*\.ya?ml$ |
+            \.(pem|key|p12|pfx)$ | (^|/)id_(rsa|dsa|ecdsa|ed25519)$ |
+            \.(secret|local)\.tfvars$ | \.local\.auto\.tfvars$ |
+            (^|/)crash(\.[^/]+)?\.log$
+          )
+
+  # ---------------------------------------------------------------------------
   # Terraform: formatting and static checks (commit), init + validate and
   # TFLint (push), terraform test (manual). The push/manual hooks run the CI
   # scripts on the affected roots only (ci.py change detection); none needs
@@ -91,6 +122,33 @@ repos:
         files: ^(az-infra-generic|tp-local|ci)/
         exclude: \.md$
         require_serial: true
+        stages: [manual]
+
+  # ---------------------------------------------------------------------------
+  # Misconfiguration scanners (manual; CI runs them on every change). Same
+  # configuration as CI: <project>/.trivyignore.yaml, <project>/.checkov.yaml,
+  # ci/policies/checkov, and /.checkov.yaml for the workflows.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: trivy
+        name: Trivy HIGH/CRITICAL misconfigurations (affected projects)
+        entry: ci/scripts/pre-commit-hook.sh trivy
+        language: script
+        files: ^(az-infra-generic|tp-local|ci)/
+        exclude: \.md$
+        require_serial: true
+        verbose: true
+        stages: [manual]
+
+      - id: checkov
+        name: Checkov policies (affected projects, workflows)
+        entry: ci/scripts/pre-commit-hook.sh checkov
+        language: script
+        files: ^(az-infra-generic|tp-local|ci|\.github/workflows)/|^\.checkov\.yaml$
+        exclude: \.md$
+        require_serial: true
+        verbose: true
         stages: [manual]
 
   # ---------------------------------------------------------------------------

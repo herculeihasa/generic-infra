@@ -9,7 +9,7 @@
 #   ci/scripts/pre-commit-hook.sh test     [files...]   # init + validate + terraform test
 #   ci/scripts/pre-commit-hook.sh tflint   [files...]   # TFLint per affected project
 #   ci/scripts/pre-commit-hook.sh trivy    [files...]   # Trivy HIGH/CRITICAL gate
-#   ci/scripts/pre-commit-hook.sh checkov  [files...]   # Checkov project policies
+#   ci/scripts/pre-commit-hook.sh checkov  [files...]   # Checkov project (+ workflow) policies
 #
 # Root selection is ci.py's (same rules as CI change detection). Terraform is
 # required; TFLint, Trivy and Checkov are optional locally: when one is not
@@ -92,6 +92,11 @@ for project in $(projects); do
       ;;
   esac
 done
+
+# Workflow hardening policies (CI: security-scan.sh repo checkov-workflows).
+if [[ "$check" == "checkov" ]] && printf '%s\n' "$@" | grep -q '^\.github/workflows/'; then
+  optional_tool checkov && run bash "${scripts_dir}/security-scan.sh" repo checkov-workflows
+fi
 
 if ((failed > 0)); then
   ci_error "${check}: ${failed} check(s) failed"
