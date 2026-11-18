@@ -7,7 +7,7 @@
 | **Code** | `scripts/tf-init.sh`, `bootstrap/*.tf`, `environments/dev/*.tf`, `modules/microk8s/main.tf`, `modules/k8s-namespace/main.tf` |
 
 **Context:** WSL, as the cluster owner. Paths are relative to the repository
-root (e.g. `~/src/azure-infra`).
+root (e.g. `~/src/generic-infra`).
 
 ## 1. What Terraform manages, and how
 

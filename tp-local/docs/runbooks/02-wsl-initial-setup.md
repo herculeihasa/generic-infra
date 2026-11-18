@@ -69,8 +69,8 @@ wsl --shutdown                                 # applies the new limits
 
 ```bash
 mkdir -p ~/src
-git clone https://github.com/<owner>/<repository>.git ~/src/azure-infra
-cd ~/src/azure-infra
+git clone https://github.com/<owner>/<repository>.git ~/src/generic-infra
+cd ~/src/generic-infra
 ```
 
 Cloning inside the Linux filesystem is faster than working on `/mnt/c` or
@@ -93,7 +93,7 @@ wsl --shutdown          # PowerShell
 ```
 
 ```bash
-cd ~/src/azure-infra && sudo tp-local/scripts/wsl/prepare-wsl.sh --with-kubectl-helm   # WSL, second run
+cd ~/src/generic-infra && sudo tp-local/scripts/wsl/prepare-wsl.sh --with-kubectl-helm   # WSL, second run
 ```
 
 Second run: installs `snapd curl ca-certificates gnupg jq unzip git`,
@@ -137,7 +137,7 @@ blocking): less than 4096 MiB of RAM, less than 20 GiB free under `/var`.
 2. Initialize with the canonical state path, validate and test:
 
    ```bash
-   cd ~/src/azure-infra/tp-local/bootstrap
+   cd ~/src/generic-infra/tp-local/bootstrap
    ../scripts/tf-init.sh bootstrap
    terraform validate && terraform test
    ```
@@ -233,12 +233,12 @@ kubectl --kubeconfig "$env:USERPROFILE\.kube\tp-local-microk8s.yaml" get nodes
 **Status:** Pending external prerequisites. **Context:** WSL.
 
 ```bash
-cd ~/src/azure-infra/tp-local/environments/dev
+cd ~/src/generic-infra/tp-local/environments/dev
 ../../scripts/tf-init.sh environments/dev
 terraform validate && terraform test
 terraform plan -out=dev.tfplan          # first plan: 14 to add
 terraform apply dev.tfplan
-cd ~/src/azure-infra && tp-local/scripts/verify-cluster.sh
+cd ~/src/generic-infra && tp-local/scripts/verify-cluster.sh
 ```
 
 **Expected result:** `verify-cluster: all checks passed` (kubeconfig mode,

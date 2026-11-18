@@ -311,7 +311,7 @@ harness, see the [project README §12](../../README.md#12-validation-commands)).
 
 ```hcl
 module "aks" {
-  source = "git::https://<git-host>/<org>/azure-infra.git//az-infra-generic/modules/aks?ref=<tag-or-commit>"
+  source = "git::https://<git-host>/<org>/generic-infra.git//az-infra-generic/modules/aks?ref=<tag-or-commit>"
 
   name                = "aks-<project>-<env>-<region>"
   location            = "<region>"

@@ -1,4 +1,4 @@
-# azure-infra
+# generic-infra
 
 Infrastructure as Code repository with two Terraform projects that follow the
 same engineering standards, and a shared CI/CD pipeline that blocks any

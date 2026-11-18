@@ -530,7 +530,7 @@ disabled.
 
 **Minimal** (AKS-managed VNet, no monitoring). Reference the module from
 another repository with a Git source pinned to a tag, e.g.
-`git::https://<git-host>/<org>/azure-infra.git//az-infra-generic/modules/aks?ref=v1.0.0`.
+`git::https://<git-host>/<org>/generic-infra.git//az-infra-generic/modules/aks?ref=v1.0.0`.
 
 ```hcl
 module "aks" {

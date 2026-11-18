@@ -251,7 +251,7 @@ own backups ([08 MNT-07](08-maintenance-and-lifecycle.md#mnt-07-back-up-the-envi
 cd ~/.local/state/tp-local
 cp environments-dev.tfstate "environments-dev.tfstate.damaged-$(date +%Y%m%d%H%M%S)"
 cp environments-dev.tfstate.backup environments-dev.tfstate
-cd ~/src/azure-infra/tp-local/environments/dev && terraform plan
+cd ~/src/generic-infra/tp-local/environments/dev && terraform plan
 ```
 
 **Validation:** the plan shows only the changes made after that backup.

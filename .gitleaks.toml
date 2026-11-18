@@ -1,6 +1,6 @@
 # Gitleaks configuration (secret detection in Git history), used by
 # ci/scripts/security-scan.sh. Any finding fails the pipeline.
-title = "azure-infra gitleaks configuration"
+title = "generic-infra gitleaks configuration"
 
 [extend]
 # Start from the full default rule set.

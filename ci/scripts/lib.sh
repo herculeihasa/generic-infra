@@ -9,7 +9,7 @@ set -Eeuo pipefail
 
 # cd + pwd normalises to a POSIX path (Git for Windows returns "E:/...").
 CI_REPO_ROOT="$(cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)" && pwd)"
-CI_TOOLS_DIR="${CI_TOOLS_DIR:-${HOME}/.cache/azure-infra-ci}"
+CI_TOOLS_DIR="${CI_TOOLS_DIR:-${HOME}/.cache/generic-infra-ci}"
 CI_BIN_DIR="${CI_TOOLS_DIR}/bin"
 export PATH="${CI_BIN_DIR}:${PATH}"
 
