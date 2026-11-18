@@ -118,7 +118,7 @@ backend read the same variables.
 
 | Activity | Scope | Roles |
 |---|---|---|
-| Bootstrap the backend ([03 BS-01](03-backend-and-state-management.md#bs-01-bootstrap-the-backend)) | Subscription | *Owner*, or *Contributor* + *User Access Administrator* (role assignments, management lock) |
+| Bootstrap the backend ([03 BS-01](03-backend-and-state-management.md#bs-01-bootstrap-the-backend)) | Subscription | *Owner*, or *Contributor* + *User Access Administrator* (the `storage_account` module creates role assignments and the management lock) |
 | Deploy an environment | Subscription (creates the resource group) | *Contributor* + *Role Based Access Control Administrator* (the AKS module creates role assignments) |
 | Read/write its state | Container `tfstate-<env>` | *Storage Blob Data Contributor* (granted by the bootstrap) |
 | Plan only (pipeline plan identity) | Resource group(s) / subscription, container | *Reader*, *Azure Kubernetes Service Cluster User Role*, *Storage Blob Data Reader* |
@@ -190,7 +190,7 @@ Pending external prerequisites ([03 BS-05](03-backend-and-state-management.md#bs
 without Azure access. **Context:** repository root.
 
 ```bash
-for root in bootstrap environments/dev modules/aks; do
+for root in bootstrap environments/dev modules/aks modules/storage_account; do
   terraform -chdir="az-infra-generic/${root}" init -backend=false -input=false
 done
 terraform -chdir=az-infra-generic/environments/dev init -backend=false -lockfile=readonly

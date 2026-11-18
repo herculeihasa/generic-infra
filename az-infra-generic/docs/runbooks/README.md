@@ -42,7 +42,7 @@ recover the infrastructure without prior knowledge of the project.
 |---|---|---|
 | 01 | [Architecture](01-architecture.md) | Components, diagrams, files, providers, environments, naming, lifecycle |
 | 02 | [Prerequisites and initial setup](02-prerequisites-and-setup.md) | Tools, Azure authentication, permissions, environment variables, initialization |
-| 03 | [Backend and state management](03-backend-and-state-management.md) | State bootstrap, locking, isolation, inspection, backup, recovery, migration |
+| 03 | [Backend and state management](03-backend-and-state-management.md) | State bootstrap (Storage Account module), bootstrap state, locking, isolation, inspection, backup, recovery, migration |
 | 04 | [AKS module operations](04-aks-module-operations.md) | Module interface, create, update, scale, upgrade, access, destroy |
 | 05 | [Deployment procedures](05-deployment-procedures.md) | Full Terraform lifecycle, local and pipeline execution |
 | 06 | [CI/CD operations](06-cicd-operations.md) | Pipeline stages, gates, approvals, Azure authentication, troubleshooting |
@@ -62,7 +62,7 @@ exist after deployment are placeholders.
 | `hashicorp/azurerm` | 5.14.0 (constraint `~> 5.14`) | `environments/dev/.terraform.lock.hcl` |
 | Region | `francecentral` | `environments/dev/terraform.tfvars` |
 | State resource group | `rg-azinfra-tfstate-frc` | `bootstrap/main.tf` |
-| State storage account | `stazinfratfstate<hash6>` (hash of subscription ID, known after bootstrap) | `bootstrap/main.tf` |
+| State storage account | `stazinfratfstate<hash6>` (hash of subscription ID, known after bootstrap) | `bootstrap/main.tf` (name), `modules/storage_account/main.tf` (account) |
 | State container / key (dev) | `tfstate-dev` / `az-infra-generic/aks.tfstate` | `environments/dev/backend.tf` |
 | dev resource group | `rg-azinfra-dev-frc` | `environments/dev/locals.tf` |
 | dev AKS cluster | `aks-azinfra-dev-frc` | `environments/dev/locals.tf` |
@@ -80,6 +80,8 @@ exist after deployment are placeholders.
 | Check my Azure permissions | [02 §2](02-prerequisites-and-setup.md#2-required-azure-permissions) |
 | Create the Terraform state storage (first time) | [03 BS-01](03-backend-and-state-management.md#bs-01-bootstrap-the-backend) |
 | Connect an environment to its state | [03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend) |
+| Back up or recover the bootstrap state | [03 BS-11](03-backend-and-state-management.md#bs-11-store-back-up-and-recover-the-bootstrap-state) |
+| Upgrade a bootstrap applied before the storage module | [03 BS-15](03-backend-and-state-management.md#bs-15-upgrade-an-existing-bootstrap-state-to-the-storage-module) |
 | Release a stuck state lock | [03 BS-10](03-backend-and-state-management.md#bs-10-release-a-stuck-state-lock) |
 | Restore a previous state version | [03 BS-08](03-backend-and-state-management.md#bs-08-restore-a-previous-state-version) |
 | Deploy or change dev from my workstation | [05 DEP-01..08](05-deployment-procedures.md) |

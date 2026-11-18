@@ -2,19 +2,21 @@
 
 | | |
 |---|---|
-| **Scope** | `az-infra-generic`: bootstrap, `environments/dev`, `modules/aks` |
+| **Scope** | `az-infra-generic`: bootstrap, `environments/dev`, `modules/aks`, `modules/storage_account` |
 | **Status** | Implemented and validated offline; not deployed (pending Azure access) |
 | **Source of truth** | Terraform code under `az-infra-generic/` |
 
 ## 1. Purpose and scope
 
-`az-infra-generic` provisions Azure infrastructure with Terraform around one
-reusable building block: the **AKS module** (`modules/aks`). It contains:
+`az-infra-generic` provisions Azure infrastructure with Terraform around two
+reusable building blocks: the **AKS module** (`modules/aks`) and the
+**Storage Account module** (`modules/storage_account`). It contains:
 
-* a **bootstrap** configuration that creates the Terraform remote state storage;
+* a **bootstrap** configuration that creates the Terraform remote state storage
+  through the Storage Account module, with local state;
 * one implemented environment, **dev**, that owns the resource group, network
   and Log Analytics workspace and instantiates the AKS module;
-* the **AKS module**, consumable by other projects without modification.
+* the two modules, consumable by other projects without modification.
 
 Out of scope (not implemented): container registry, Key Vault, private DNS
 zones, firewall/NAT resources, other environments than `dev`.
@@ -23,9 +25,10 @@ zones, firewall/NAT resources, other environments than `dev`.
 
 | Component | Path | Role | Terraform state | Status |
 |---|---|---|---|---|
-| Bootstrap | `bootstrap/` | Storage account, per-environment state containers, Entra ID data-plane roles, delete lock | Local file `bootstrap/terraform.tfstate` | Implemented |
+| Bootstrap | `bootstrap/` | Resource group + Storage Account module call: account, per-environment state containers, Entra ID data-plane roles, delete lock | Local file `bootstrap/terraform.tfstate` (never the backend it creates) | Implemented |
 | dev environment | `environments/dev/` | Resource group, VNet + node subnet, Log Analytics workspace, AKS module call | Remote: `tfstate-dev` / `az-infra-generic/aks.tfstate` | Implemented |
 | AKS module | `modules/aks/` | Cluster, control plane identity, node pools, role assignments, monitoring wiring | Part of the calling configuration's state | Implemented |
+| Storage Account module | `modules/storage_account/` | Hardened storage account, blob containers, optional role assignments and delete lock | Part of the calling configuration's state (bootstrap) | Implemented |
 | rec / ppr / prod environments | `environments/rec`, `ppr`, `prod` (empty) | State containers exist after bootstrap; roots not written | — | Not implemented |
 | CI/CD pipeline | `.github/workflows/az-infra-generic.yml` + reusable workflows | Quality and security gates, plan, approval, apply | — | Implemented; Azure stages pending |
 
@@ -42,7 +45,9 @@ flowchart TD
         BS["bootstrap/<br/>local state"]
         ENV["environments/dev<br/>azurerm backend"]
         MOD["modules/aks<br/>reusable module"]
+        MODSA["modules/storage_account<br/>reusable module"]
         ENV -->|"module call"| MOD
+        BS -->|"module call"| MODSA
     end
     BS -->|"creates"| SA[("Storage account<br/>tfstate-* containers")]
     ENV -->|"reads and writes state<br/>Entra ID, blob lease lock"| SA
@@ -104,12 +109,14 @@ sequenceDiagram
 | `.terraform-version` | Exact CLI version (1.17.2) for tfenv/tenv and CI |
 | `.tflint.hcl`, `.checkov.yaml`, `.checkov-prod.yaml`, `.trivyignore.yaml` | Lint and security scanner configuration ([pipeline documentation](../../../docs/ci-cd.md)) |
 | `bootstrap/versions.tf` | Terraform/provider constraints **and** the provider block (no backend: local state) |
-| `bootstrap/variables.tf`, `main.tf`, `outputs.tf` | State storage definition |
+| `bootstrap/variables.tf`, `main.tf`, `outputs.tf` | State storage definition: resource group and `module "state_storage"` |
+| `bootstrap/moved.tf` | Moves states created before the module to the module addresses |
 | `environments/dev/backend.tf` | Partial `azurerm` backend: container `tfstate-dev`, key, Entra ID auth |
 | `environments/dev/backend.hcl.example` | Template of the generated `backend.hcl` (storage account name) |
 | `environments/dev/versions.tf`, `providers.tf` | Constraints and provider configuration |
 | `environments/dev/variables.tf`, `locals.tf`, `main.tf`, `outputs.tf`, `terraform.tfvars` | dev environment |
 | `modules/aks/*.tf` | Module: `versions`, `variables`, `locals`, `identity`, `main`, `node_pools`, `monitoring`, `outputs` |
+| `modules/storage_account/*.tf` | Module: `versions`, `variables`, `locals`, `main`, `outputs` (reference: `modules/storage_account/README.md`) |
 | `*/tests/*.tftest.hcl` | Offline `terraform test` suites (mocked provider) |
 | `*/.terraform.lock.hcl` | Provider lock files of the root configurations (4 platforms) |
 
@@ -158,10 +165,41 @@ Creating a new environment from dev: [project README §2](../../README.md#adding
 ## 8. Remote state architecture
 
 One storage account holds one private container per environment
-(`tfstate-<env>`) plus `tfstate-bootstrap`. Access is Entra ID only (Shared
-Key disabled), locking uses native blob leases, versioning and 30-day soft
-delete protect every state revision. Details and procedures:
-[03 Backend and state management](03-backend-and-state-management.md), and the [project README §6](../../README.md#6-remote-backend-architecture).
+(`tfstate-<env>`) plus the reserved `tfstate-bootstrap`. Access is Entra ID
+only (Shared Key disabled), locking uses native blob leases, versioning and
+30-day soft delete protect every state revision.
+
+The bootstrap owns the resource group and calls the Storage Account module
+(`module.state_storage`), passing every setting explicitly:
+
+```mermaid
+flowchart LR
+    subgraph BOOT["bootstrap/ (local state, no backend block)"]
+        RG["azurerm_resource_group.tfstate"]
+        subgraph MODSA["module.state_storage (modules/storage_account)"]
+            SA["azurerm_storage_account.this<br/>Entra ID only, TLS 1.2, double encryption"]
+            CT["azurerm_storage_container.this<br/>key = environment, private"]
+            RA["azurerm_role_assignment.this<br/>account or container scope"]
+            LK["azurerm_management_lock.this<br/>CanNotDelete"]
+        end
+    end
+    RG -->|"name, location"| SA
+    SA --> CT
+    CT --> RA
+    RA --> LK
+```
+
+| Design point | Implementation |
+|---|---|
+| Separation of concerns | The module manages the account and what belongs to it; the bootstrap owns naming, the resource group, the environment list and who gets access. |
+| Bootstrap independence | No backend block in `bootstrap/` (enforced by `ci.py azure-config`); every object is managed through Azure Resource Manager, so the bootstrap never needs the data plane of the account it creates. |
+| Stable addresses | Containers are keyed by environment, role assignments by `current-principal` or `<env>/<principal_id>`; `bootstrap/moved.tf` migrates states created before the module. |
+| Secure defaults | The module defaults to no public endpoint and a `Deny` firewall; the bootstrap explicitly opens the public endpoint (Entra ID still required) until runner IPs or private endpoints exist. |
+
+Details and procedures:
+[03 Backend and state management](03-backend-and-state-management.md), the
+module reference `modules/storage_account/README.md`, and the
+[project README §6](../../README.md#6-remote-backend-architecture).
 
 ## 9. Naming conventions
 
@@ -180,9 +218,15 @@ delete protect every state revision. Details and procedures:
 | Data collection rule | `MSCI-<region>-<cluster name>` | `MSCI-francecentral-aks-azinfra-dev-frc` |
 | Diagnostic setting | `diag-<cluster name>` | `diag-aks-azinfra-dev-frc` |
 | Node pools | map keys | `system`, `apps` |
+| State resource group (bootstrap) | `rg-<project>-tfstate-<region>` | `rg-azinfra-tfstate-frc` |
+| State storage account (bootstrap) | `st<project>tfstate<hash6>` | `stazinfratfstate` + 6 hexadecimal characters |
+| State containers (bootstrap) | `tfstate-<env>` | `tfstate-dev`, … , `tfstate-bootstrap` |
+| State account lock (bootstrap) | `lock-<account>-nodelete` | `lock-stazinfratfstate<hash6>-nodelete` |
 
 Tags on every resource: `project`, `environment`, `managed_by = terraform`,
-`stack = aks` (+ `module = aks` on module resources).
+`stack = aks` (+ `module = aks` on module resources). The bootstrap tags its
+resources `project`, `purpose = terraform-remote-state`, `managed_by`,
+`stack = bootstrap` (+ `module = storage_account` on the state account).
 
 ## 10. Infrastructure lifecycle
 
@@ -212,4 +256,4 @@ Tags on every resource: `project`, `environment`, `managed_by = terraform`,
 
 * [Project README](../../README.md) (reference tables, examples, limitations §14)
 * [Pipeline documentation](../../../docs/ci-cd.md)
-* Module README: `modules/aks/README.md`
+* Module READMEs: `modules/aks/README.md`, `modules/storage_account/README.md`

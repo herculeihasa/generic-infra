@@ -13,8 +13,9 @@ terraform {
   }
 
   # No backend block on purpose: the bootstrap creates the remote backend
-  # storage, so its own state is LOCAL (chicken-and-egg). See README,
-  # "Backend storage bootstrap procedure".
+  # storage, so its own state is LOCAL (chicken-and-egg) and is kept outside
+  # that storage. `ci.py azure-config` rejects a backend or cloud block here.
+  # See README, "Backend storage bootstrap procedure".
 }
 
 provider "azurerm" {

@@ -6,7 +6,7 @@ deployment that has not passed the quality, security and approval gates.
 
 | Path | Content |
 |---|---|
-| [`az-infra-generic/`](az-infra-generic/README.md) | Generic Azure infrastructure: reusable AKS module, Azure Blob Storage remote state, `dev` environment |
+| [`az-infra-generic/`](az-infra-generic/README.md) | Generic Azure infrastructure: reusable AKS and Storage Account modules, Azure Blob Storage remote state, `dev` environment |
 | [`tp-local/`](tp-local/README.md) | Local Kubernetes: MicroK8s inside WSL2 provisioned by Terraform, Kubernetes and Helm layers |
 | [`az-infra-generic/docs/runbooks/`](az-infra-generic/docs/runbooks/README.md) | Azure operational runbooks: setup, state, AKS module, deployments, CI/CD, troubleshooting, security and maintenance |
 | [`tp-local/docs/runbooks/`](tp-local/docs/runbooks/README.md) | Local cluster operational runbooks: WSL setup, MicroK8s, Terraform, Kubernetes/Helm, CI/CD, troubleshooting, maintenance |

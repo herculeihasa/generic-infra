@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Scope** | `az-infra-generic/bootstrap` and the `azurerm` backend of `environments/<env>` |
-| **Status** | Implemented; bootstrap plan validated offline (`bootstrap/tests`, 7 runs). All Azure-side procedures: **Pending external prerequisites** |
-| **Code** | `bootstrap/main.tf`, `bootstrap/variables.tf`, `bootstrap/outputs.tf`, `environments/dev/backend.tf`, `environments/dev/backend.hcl.example` |
+| **Scope** | `az-infra-generic/bootstrap`, the `modules/storage_account` module it calls, and the `azurerm` backend of `environments/<env>` |
+| **Status** | Implemented; validated offline (`bootstrap/tests`: 9 runs incl. a mocked apply; `modules/storage_account/tests`: 41 runs; migration of a pre-module bootstrap state simulated). All Azure-side procedures: **Pending external prerequisites** |
+| **Code** | `bootstrap/main.tf`, `bootstrap/moved.tf`, `bootstrap/variables.tf`, `bootstrap/outputs.tf`, `modules/storage_account/main.tf`, `environments/dev/backend.tf`, `environments/dev/backend.hcl.example` |
 | **Controls reference** | [project README §6](../../README.md#6-remote-backend-architecture) |
 
 > [!WARNING]
@@ -18,7 +18,7 @@
 ```mermaid
 flowchart LR
     subgraph RG["rg-azinfra-tfstate-frc (bootstrap, local state)"]
-        subgraph SA["stazinfratfstate + 6-char hash: StorageV2, ZRS, Shared Key disabled"]
+        subgraph SA["module.state_storage: stazinfratfstate + 6-char hash, StorageV2, ZRS, Shared Key disabled"]
             CB["tfstate-bootstrap"]
             CD["tfstate-dev<br/>az-infra-generic/aks.tfstate"]
             CR["tfstate-rec"]
@@ -40,7 +40,9 @@ flowchart LR
 | Locking | Native blob lease taken by the backend for every state-writing operation |
 | Recovery | Blob versioning + 30-day soft delete (blobs and containers) |
 | Encryption | Storage Service Encryption + infrastructure (double) encryption, HTTPS/TLS 1.2 |
-| Deletion protection | `prevent_destroy` (Terraform) + `CanNotDelete` lock (Azure) |
+| Deletion protection | `prevent_destroy` (Terraform, in the module) + `CanNotDelete` lock (Azure) |
+| Implementation | `modules/storage_account` called as `module.state_storage`; the bootstrap keeps the resource group, naming and access policy |
+| Bootstrap independence | `bootstrap/` has no backend block (checked by `ci.py azure-config`) and manages everything through Azure Resource Manager: it never needs the backend it creates |
 
 ## 2. Bootstrap configuration reference
 
@@ -60,12 +62,33 @@ flowchart LR
 | `delete_lock_enabled` | `true` | `CanNotDelete` management lock |
 | `resource_providers_to_register` | `["Microsoft.Storage"]` | Set `[]` if registration is managed elsewhere |
 
+How the bootstrap drives the module (`module "state_storage"` in
+`bootstrap/main.tf`, every input explicit):
+
+| Module input | Value passed by the bootstrap |
+|---|---|
+| `name`, `resource_group_name`, `location`, `tags` | Generated or overridden names; the bootstrap resource group's name and location (implicit dependency); bootstrap tags |
+| `account_kind`, `account_tier`, `access_tier` | `StorageV2`, `Standard`, `Hot` |
+| `account_replication_type` | `account_replication_type` |
+| `shared_access_key_enabled`, `blob_public_access_enabled` | `false`, `false` |
+| `infrastructure_encryption_enabled`, `allowed_copy_scope` | `true`, `AAD` |
+| `public_network_access` | `public_network_access` |
+| `network_rules` | `default_action = Deny` when `allowed_ip_ranges` is set, otherwise `Allow`; `bypass = ["AzureServices"]`; `ip_rules = allowed_ip_ranges` |
+| `blob_properties` | versioning on; `blob_soft_delete_retention_days`, `container_soft_delete_retention_days` |
+| `containers` | key = environment (and `bootstrap`), name `tfstate-<key>`, `private` |
+| `role_assignments` | `current-principal` (account scope, if `grant_current_principal_access`) and `<env>/<principal_id>` (container scope, from `state_contributors`), all *Storage Blob Data Contributor* |
+| `delete_lock_enabled`, `delete_lock_notes` | `delete_lock_enabled`, fixed note |
+
+The module's own defaults (no public endpoint, `Deny` firewall, no lock) and
+its full interface are described in `modules/storage_account/README.md`.
+
 | Output | Use |
 |---|---|
 | `storage_account_name` | Backend configuration of every environment |
 | `backend_hcl` | Ready-to-write content of `environments/<env>/backend.hcl` |
 | `state_containers` | Container names and resource IDs (scopes for role assignments) |
 | `resource_group_name`, `storage_account_id`, `blob_endpoint` | Inspection, additional role assignments |
+| `security_configuration` | Effective security settings of the account (audit) |
 
 ## BS-01 Bootstrap the backend
 
@@ -92,9 +115,10 @@ flowchart LR
    ```
 
 3. Plan and review. With default inputs the plan adds **9** resources: the
-   resource group, the storage account, 5 containers (`tfstate-bootstrap`,
-   `-dev`, `-rec`, `-ppr`, `-prod`), the current-principal role assignment and
-   the management lock (+1 role assignment per `state_contributors` entry).
+   resource group, then in `module.state_storage` the storage account, 5
+   containers (`tfstate-bootstrap`, `-dev`, `-rec`, `-ppr`, `-prod`), the
+   current-principal role assignment and the management lock (+1 role
+   assignment per `state_contributors` entry).
 
    ```bash
    terraform plan -out=bootstrap.tfplan
@@ -137,8 +161,8 @@ can be re-run: completed resources are kept in the local state.
 **Rollback:** see BS-14 (removal is deliberately multi-step).
 
 **Bootstrap state:** `bootstrap/terraform.tfstate` stays local (ignored by
-Git) and contains sensitive attributes. Store it securely (option A) or
-migrate it with BS-11 (option B).
+Git) and contains sensitive attributes. Copy it to a secured location outside
+the state account right away (BS-11).
 
 ## BS-02 Generate and commit `backend.hcl`
 
@@ -339,32 +363,73 @@ az storage blob lease break --account-name "<account>" --container-name tfstate-
 
 **Validation:** `terraform plan` acquires and releases the lock normally.
 
-## BS-11 Migrate the bootstrap state into the backend (option B)
+## BS-11 Store, back up and recover the bootstrap state
 
 **Status:** Pending external prerequisites. **Context:** `az-infra-generic/bootstrap`.
+**Purpose:** keep the bootstrap state safe **without** making the bootstrap
+depend on the backend it creates.
 
-1. Add to the `terraform {}` block of `bootstrap/versions.tf`:
+> [!IMPORTANT]
+> Never store the bootstrap state in the state account itself (for example by
+> adding a `backend "azurerm"` block pointing at `tfstate-bootstrap`). A
+> bootstrap change that removed your access (firewall, public network access,
+> role assignment) would lock you out of the state needed to repair it.
+> `ci.py azure-config` rejects any `backend` or `cloud` block in `bootstrap/`.
+
+1. **After every bootstrap apply**, copy the state to a secured location that
+   does not depend on this account (secret vault, restricted operations share,
+   or a storage account in another subscription), for example:
+
+   ```bash
+   cp terraform.tfstate "<secure-location>/bootstrap-$(date +%Y%m%d%H%M%S).tfstate"
+   ```
+
+2. **Before the next bootstrap change**, restore the latest copy and confirm it
+   matches Azure:
+
+   ```bash
+   cp "<secure-location>/<latest-copy>.tfstate" terraform.tfstate
+   terraform init && terraform plan   # expected: no unexpected change
+   ```
+
+3. **If the state was previously migrated into `tfstate-bootstrap`** (former
+   option B): remove the `backend` block from `bootstrap/versions.tf`, run
+   `terraform init -migrate-state` to copy it back to a local file, then apply
+   step 1.
+
+4. **If every copy is lost**, adopt the resources again with `import` blocks
+   in a temporary file `imports.tf` created in `bootstrap/` (names are deterministic; `<sub>`,
+   `<account>` and the role assignment IDs come from `az` commands):
 
    ```hcl
-   backend "azurerm" {
-     use_azuread_auth = true
-     container_name   = "tfstate-bootstrap"
-     key              = "bootstrap.tfstate"
+   import {
+     to = azurerm_resource_group.tfstate
+     id = "/subscriptions/<sub>/resourceGroups/rg-azinfra-tfstate-frc"
+   }
+
+   import {
+     to = module.state_storage.azurerm_storage_account.this
+     id = "/subscriptions/<sub>/resourceGroups/rg-azinfra-tfstate-frc/providers/Microsoft.Storage/storageAccounts/<account>"
+   }
+
+   import {
+     for_each = toset(["bootstrap", "dev", "rec", "ppr", "prod"])
+     to       = module.state_storage.azurerm_storage_container.this[each.key]
+     id       = "/subscriptions/<sub>/resourceGroups/rg-azinfra-tfstate-frc/providers/Microsoft.Storage/storageAccounts/<account>/blobServices/default/containers/tfstate-${each.key}"
+   }
+
+   import {
+     to = module.state_storage.azurerm_management_lock.this[0]
+     id = "/subscriptions/<sub>/resourceGroups/rg-azinfra-tfstate-frc/providers/Microsoft.Storage/storageAccounts/<account>/providers/Microsoft.Authorization/locks/lock-<account>-nodelete"
    }
    ```
 
-2. Migrate (Terraform asks for confirmation to copy the local state):
-
-   ```bash
-   terraform init -migrate-state \
-     -backend-config="storage_account_name=$(terraform output -raw storage_account_name)"
-   ```
-
-3. **Validate:** `terraform plan` shows no change. Then delete the local
-   `terraform.tfstate` and `terraform.tfstate.backup` and commit `versions.tf`.
-
-**Rollback:** remove the backend block and run
-`terraform init -migrate-state` to copy the state back to a local file.
+   Role assignments: `az role assignment list --scope <account-or-container-id> -o table`,
+   then one block per assignment with
+   `to = module.state_storage.azurerm_role_assignment.this["current-principal"]`
+   (or `["<env>/<principal_id>"]`) and the assignment ID as `id`. Run
+   `terraform plan` (imports only, no create/destroy expected), apply, delete
+   `imports.tf`, then step 1.
 
 ## BS-12 Migrate an environment state to another storage account
 
@@ -408,11 +473,47 @@ unexpected change.
 2. Remove the `lifecycle { prevent_destroy = true }` block of
    `azurerm_storage_account.this` in `modules/storage_account/main.tf`
    (address `module.state_storage.azurerm_storage_account.this`), on a
-   dedicated branch: the module is shared by every caller.
+   dedicated branch that is never merged: the module is shared by every
+   caller.
 3. `terraform plan -destroy -out=destroy.tfplan`, review, `terraform apply destroy.tfplan`.
+
+Alternative without editing the module: replace the module call by
+`removed { from = module.state_storage  lifecycle { destroy = false } }`,
+delete `bootstrap/moved.tf` and the outputs that reference the module, apply
+(Terraform forgets the objects), then delete the resource group with
+`az group delete` once the lock is gone.
 
 The lock also blocks deleting state containers and may block removing role
 assignments scoped to them; lift it temporarily for such changes.
+
+## BS-15 Upgrade an existing bootstrap state to the storage module
+
+**Status:** Implemented (migration simulated offline). Applies only to a
+bootstrap applied **before** `modules/storage_account` existed.
+**Context:** `az-infra-generic/bootstrap`, the restored local state (BS-11).
+
+1. Restore the latest bootstrap state copy (BS-11 step 2) and back it up again.
+2. Install the module and plan:
+
+   ```bash
+   terraform init -lockfile=readonly
+   terraform plan -out=bootstrap.tfplan
+   ```
+
+3. **Expected plan:** every object reported as
+   `has moved to module.state_storage...` (storage account, containers, role
+   assignments, lock), **0 to add, 0 to destroy**, and 1 in-place update of
+   `module.state_storage.azurerm_storage_account.this` (new tag
+   `module = "storage_account"`). Stop if anything is created or destroyed:
+   the addresses or keys do not match `bootstrap/moved.tf`.
+4. `terraform apply bootstrap.tfplan`, then copy the new state (BS-11 step 1).
+
+**Validation:** `terraform plan` reports no changes; `terraform state list`
+shows only `azurerm_resource_group.tfstate`, `data.azurerm_client_config.current`
+and `module.state_storage.*` addresses.
+
+**Rollback:** restore the state copy taken in step 1 and check out the
+previous bootstrap code.
 
 ## 3. Common backend initialization errors
 
@@ -424,11 +525,14 @@ assignments scoped to them; lift it temporarily for such changes.
 | `Backend configuration changed` | `backend.hcl` or `backend.tf` modified | `terraform init -reconfigure` (same state) or `-migrate-state` (BS-12) |
 | `Error acquiring the state lock` | Concurrent or interrupted run | BS-10 |
 | `Invalid character` / BOM in `backend.hcl` | UTF-16 file from Windows PowerShell 5.1 | Recreate with PowerShell 7 (BS-02) |
+| `403 AuthorizationFailure` / `This request is not authorized to perform this operation` | Client IP not in `allowed_ip_ranges`, or `public_network_access = "Disabled"` without private connectivity | BS-04; the bootstrap itself is unaffected (management plane only) |
+| `Instance cannot be destroyed` on `module.state_storage.azurerm_storage_account.this` | An input that replaces the account changed (name, region, tier, encryption), or `bootstrap/moved.tf` does not match the state | Revert the input; for an old state follow BS-15 |
 
 Further diagnosis: [07 T-03](07-troubleshooting-and-recovery.md#t-03-backend-connectivity-or-authorization).
 
 ## References
 
-* Code: `bootstrap/main.tf`, `environments/dev/backend.tf`
+* Code: `bootstrap/main.tf`, `bootstrap/moved.tf`, `modules/storage_account/main.tf`, `environments/dev/backend.tf`
+* Module reference: `modules/storage_account/README.md`
 * [Project README §6-§7](../../README.md#7-backend-storage-bootstrap-procedure)
 * [01 Architecture](01-architecture.md), [02 Prerequisites](02-prerequisites-and-setup.md)

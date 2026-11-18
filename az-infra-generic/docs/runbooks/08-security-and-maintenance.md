@@ -73,7 +73,8 @@ git diff .terraform.lock.hcl
 ```
 
 For a **major** version (6.x): read the upgrade guide, change the
-constraints (`~> 6.x` in roots, `>= 6.x, < 7.0.0` in `modules/aks/versions.tf`),
+constraints (`~> 6.x` in roots, `>= 6.x, < 7.0.0` in `modules/aks/versions.tf` and
+`modules/storage_account/versions.tf`),
 run the tests, then review a real plan carefully (attribute renames,
 defaults). Never merge a provider upgrade whose plan shows unexpected
 replacements.
@@ -85,6 +86,10 @@ repositories. Inside this repository the module is consumed by relative
 path (`../../modules/aks`): it always moves with its callers. For other
 repositories (planned):
 
+* the same applies to `modules/storage_account` (consumed by `bootstrap/` as
+  `../modules/storage_account`; tags `storage-account-module/vMAJOR.MINOR.PATCH`);
+  for both modules a renamed map key or resource address needs a `moved`
+  block in the callers (see `bootstrap/moved.tf`);
 * tag releases `aks-module/vMAJOR.MINOR.PATCH` (semantic versioning: removed
   or renamed input, changed default with replacement impact → major; new
   optional input → minor; fix → patch);
@@ -99,8 +104,9 @@ repositories (planned):
 * Scanners run on every pull request and push, and weekly (schedule).
 * Triage a finding: fix it, or accept it in `.checkov.yaml` (justified) /
   `.trivyignore.yaml` (justified, path-scoped, `expired_at`).
-* **Expiry dates:** the current Trivy acceptances (`AVD-AZU-0041`,
-  `AVD-AZU-0012`) expire on **2027-03-31**; after that date the pipeline
+* **Expiry dates:** the current Trivy acceptances (`AVD-AZU-0041` on
+  `modules/aks/main.tf`, `AVD-AZU-0012` on `modules/storage_account/main.tf`
+  for the bootstrap's public state endpoint) expire on **2027-03-31**; after that date the pipeline
   fails until they are re-reviewed (fix, or renew with a new justification).
   `ci/tests/test_security_config.py` also fails on expired entries.
 * Production plans use `.checkov-prod.yaml` (no dev acceptances for API

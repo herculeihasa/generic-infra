@@ -6,15 +6,16 @@
 #   - one resource group (owned here),
 #   - one hardened StorageV2 account through the reusable storage_account
 #     module (../modules/storage_account), with one private blob container
-#     per environment (tfstate-<env>) plus one (tfstate-bootstrap) that can
-#     receive this configuration's own state,
+#     per environment (tfstate-<env>) plus a reserved one (tfstate-bootstrap),
 #   - Entra ID data-plane role assignments (no access keys, no SAS),
 #   - deletion protection (prevent_destroy in the module + optional
 #     CanNotDelete lock).
 #
-# This configuration runs with LOCAL state because the backend does not exist
-# yet. See README "Backend storage bootstrap procedure". Existing states that
-# predate the module are migrated by moved.tf.
+# This configuration runs with LOCAL state and never uses the backend it
+# creates (no backend block, enforced by ci.py azure-config): it must stay
+# usable when the state account is unreachable or misconfigured. Keep its
+# state file outside that account. See README "Backend storage bootstrap
+# procedure". Existing states that predate the module are migrated by moved.tf.
 # =============================================================================
 
 data "azurerm_client_config" "current" {}
@@ -47,8 +48,8 @@ locals {
     "st${var.project}tfstate${substr(sha1("${data.azurerm_client_config.current.subscription_id}/${var.project}"), 0, 6)}",
   )
 
-  # "bootstrap" container: optional destination for this configuration's own
-  # state once the account exists (README, option B).
+  # "bootstrap" container: reserved (kept so existing accounts do not lose
+  # it). It must never become this configuration's backend (README §7).
   state_containers = toset(concat(["bootstrap"], var.environments))
 
   state_contributor_assignments = {

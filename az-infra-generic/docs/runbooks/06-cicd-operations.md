@@ -48,7 +48,7 @@ An apply job only starts when **all** of these succeeded, in this order:
 |---|---|---|
 | 1 | `quality / 1 · terraform fmt` | Unformatted file |
 | 2 | `quality / 1 · init / validate / test (<root>)` | Init with read-only lock file, validate or `terraform test` failure |
-| 3 | `quality / 1 · minimum Terraform version (modules/aks)` | Failure with Terraform 1.9.8 |
+| 3 | `quality / 1 · minimum Terraform version (<module>)` | Failure with Terraform 1.9.8 (`modules/aks`, `modules/storage_account`) |
 | 4 | `quality / 2 · TFLint / ShellCheck`, `quality / 2 · workflow lint` | Any lint finding of severity ≥ warning; CI unit tests |
 | 5 | `quality / 3 · security (gitleaks, trivy, checkov)` | Any secret; HIGH/CRITICAL misconfiguration not accepted; failed Checkov policy not accepted |
 | 6 | `quality / quality gate` | Any of the above failed or was cancelled |

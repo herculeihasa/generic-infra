@@ -73,7 +73,7 @@ variable "environments" {
 
   validation {
     condition     = !contains(var.environments, "bootstrap")
-    error_message = "\"bootstrap\" is reserved for the container that can hold the bootstrap's own state."
+    error_message = "\"bootstrap\" is reserved for the tfstate-bootstrap container."
   }
 }
 

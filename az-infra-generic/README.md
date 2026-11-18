@@ -1,7 +1,8 @@
 # az-infra-generic
 
 Reusable Terraform foundation for Azure, centred on a **generic Azure Kubernetes
-Service (AKS) module**, with remote state in **Azure Blob Storage**.
+Service (AKS) module** and a **secure Azure Storage Account module**, with
+remote state in **Azure Blob Storage** provisioned through that storage module.
 
 > **Status: ready for deployment, not yet deployed.** No Azure account was
 > available while this was built. Every check that does not need Azure has been
@@ -35,8 +36,9 @@ troubleshooting and recovery, security and maintenance) are in the
 
 | Component | Purpose |
 |---|---|
-| `bootstrap/` | One-time creation of the Terraform state storage (hardened storage account, one container per environment, Entra ID-only access). |
+| `bootstrap/` | One-time creation of the Terraform state storage: resource group plus the `storage_account` module (hardened account, one private container per environment, Entra ID-only access). Runs with local state. |
 | `modules/aks/` | Generic AKS module: cluster, identity, Azure CNI networking, node pools, security add-ons, Azure Monitor wiring, role assignments. Reusable across projects and environments without modifying it. |
+| `modules/storage_account/` | Generic Storage Account module: Entra ID-only, TLS 1.2, private-by-default account with versioning/soft delete, private blob containers, optional RBAC role assignments and delete lock. Reference: [module README](modules/storage_account/README.md). |
 | `environments/<env>/` | One root configuration per environment. It owns the resource group, network and Log Analytics workspace, and calls the AKS module. `dev` is implemented; `rec`, `ppr`, `prod` are ready to be created from it ([§2](#adding-an-environment-rec-ppr-prod)). |
 
 Design principles:
@@ -55,9 +57,11 @@ az-infra-generic/
 ├── .checkov.yaml             # Checkov policy configuration (+ .checkov-prod.yaml for production plans)
 ├── .trivyignore.yaml         # Trivy accepted findings (justified, expiring)
 ├── .gitignore / .gitattributes
-├── bootstrap/                # remote state storage, LOCAL state
+├── bootstrap/                # remote state storage, LOCAL state (no backend block)
 │   ├── versions.tf           # Terraform/provider constraints + provider block
-│   ├── variables.tf | main.tf | outputs.tf
+│   ├── variables.tf | outputs.tf
+│   ├── main.tf               # resource group + module "state_storage" (modules/storage_account)
+│   ├── moved.tf              # migration of pre-module states to the module addresses
 │   ├── .terraform.lock.hcl
 │   └── tests/bootstrap.tftest.hcl
 ├── environments/
@@ -71,22 +75,38 @@ az-infra-generic/
 │   │   └── tests/dev.tftest.hcl
 │   ├── rec/  ppr/  prod/     # empty: to be created from dev
 └── modules/
-    └── aks/
+    ├── aks/
+    │   ├── versions.tf       # minimum versions only, no provider block
+    │   ├── variables.tf      # interface + validations
+    │   ├── locals.tf
+    │   ├── main.tf           # azurerm_kubernetes_cluster
+    │   ├── identity.tf       # control plane identity, role assignments, access check
+    │   ├── node_pools.tf     # additional node pools + workload capacity check
+    │   ├── monitoring.tf     # Container Insights DCR, diagnostic settings
+    │   ├── outputs.tf
+    │   ├── README.md
+    │   └── tests/*.tftest.hcl
+    └── storage_account/
         ├── versions.tf       # minimum versions only, no provider block
         ├── variables.tf      # interface + validations
         ├── locals.tf
-        ├── main.tf           # azurerm_kubernetes_cluster
-        ├── identity.tf       # control plane identity, role assignments, access check
-        ├── node_pools.tf     # additional node pools + workload capacity check
-        ├── monitoring.tf     # Container Insights DCR, diagnostic settings
-        ├── outputs.tf
-        ├── README.md
+        ├── main.tf           # account, containers, role assignments, lock
+        ├── outputs.tf        # no keys / connection strings
+        ├── README.md         # full module reference
         └── tests/*.tftest.hcl
 ```
 
 Layering and dependencies:
 
 ```
+bootstrap/  (local state)
+   ├── azurerm_resource_group            rg-<project>-tfstate-<region>
+   └── module "state_storage"  (modules/storage_account)
+         ├── azurerm_storage_account     st<project>tfstate<hash6>
+         ├── azurerm_storage_container   tfstate-<env> (+ tfstate-bootstrap)
+         ├── azurerm_role_assignment     Storage Blob Data Contributor (account / container scope)
+         └── azurerm_management_lock     CanNotDelete
+                                   │
 bootstrap/ ──creates──▶ Storage account + tfstate-<env> containers
                                    ▲
                                    │ backend "azurerm" (Entra ID, blob lease lock)
@@ -139,10 +159,12 @@ account (run the bootstrap there).
 | Terraform CLI (AKS module) | `>= 1.9.0, < 2.0.0` | exercised with 1.17.2 only | `modules/aks/versions.tf` (1.9 is the first version supporting validations that reference other variables) |
 | `hashicorp/azurerm` (root configs) | `~> 5.14` | **5.14.0** | `required_providers` + committed `.terraform.lock.hcl` |
 | `hashicorp/azurerm` (AKS module) | `>= 5.14.0, < 6.0.0` | 5.14.0 | `modules/aks/versions.tf` |
+| Terraform CLI (Storage Account module) | `>= 1.9.0, < 2.0.0` | 1.17.2 and 1.9.8 (validate + tests) | `modules/storage_account/versions.tf` |
+| `hashicorp/azurerm` (Storage Account module) | `>= 5.14.0, < 6.0.0` | 5.14.0 | `modules/storage_account/versions.tf` |
 
 Version policy:
 
-* **Root configurations pin**, child modules declare minimums only. The module has no provider block and no lock file, so callers keep control of provider configuration and versions.
+* **Root configurations pin**, child modules declare minimums only. The modules have no provider block and no lock file, so callers keep control of provider configuration and versions.
 * **Lock files are committed** for `bootstrap/` and `environments/dev/`, with hashes for `windows_amd64`, `linux_amd64`, `darwin_amd64` and `darwin_arm64`, so CI on Linux and workstations on Windows/macOS install the exact same provider build.
 * **Upgrading the provider** is a reviewed change (lock file diff):
 
@@ -159,6 +181,7 @@ azurerm **5.x** specifics that this code relies on:
 * No Resource Provider is registered by default. The needed ones are listed in `resource_providers_to_register` (a variable; set it to `[]` when registration is handled by a platform team).
 * `azurerm_kubernetes_cluster` requires a `node_provisioning_profile` block (set to `Manual`: node pools are explicit). `oidc_issuer_enabled` defaults to `true`.
 * `azurerm_storage_container` uses `storage_account_id` (management plane). That is why Shared Key can be disabled on the state account.
+* `azurerm_storage_account` takes `public_network_access` as a string (`Enabled`, `Disabled`, `SecuredByPerimeter`; the boolean `public_network_access_enabled` is deprecated) and accepts only `TLS1_2` as `min_tls_version`.
 * `azurerm_monitor_diagnostic_setting` uses `enabled_metric` (the `metric` block was removed).
 
 ## 4. Azure prerequisites
@@ -257,8 +280,8 @@ Two configurations play distinct roles:
 ```
 Subscription
 └── rg-<project>-tfstate-<region>                 created by bootstrap/
-    └── st<project>tfstate<hash6>                 StorageV2, ZRS, Entra ID only
-        ├── tfstate-bootstrap                     optional home of the bootstrap state (option B)
+    └── st<project>tfstate<hash6>                 modules/storage_account: StorageV2, ZRS, Entra ID only
+        ├── tfstate-bootstrap                     reserved; never the bootstrap's backend (§7)
         ├── tfstate-dev   └── az-infra-generic/aks.tfstate   ← environments/dev
         ├── tfstate-rec   └── az-infra-generic/aks.tfstate   ← environments/rec
         ├── tfstate-ppr   └── az-infra-generic/aks.tfstate   ← environments/ppr
@@ -283,10 +306,11 @@ non-sensitive identifier and can be committed.
 | Authentication | Microsoft Entra ID only: `shared_access_key_enabled = false` (no account keys, no key-based SAS), backend `use_azuread_auth = true`. |
 | Locking | Native blob **lease** taken by the `azurerm` backend on every state-writing operation. A lock left by a killed process is released with `terraform force-unlock <LOCK_ID>`. |
 | Consistency and recovery | Blob versioning plus 30-day soft delete for blobs and containers: any previous state revision can be restored. |
-| Encryption at rest | Always-on Storage Service Encryption (AES-256, Microsoft-managed keys) **plus** infrastructure (double) encryption. Customer-managed keys can be added (`customer_managed_key` block) if policy requires it. |
+| Encryption at rest | Always-on Storage Service Encryption (AES-256, Microsoft-managed keys) **plus** infrastructure (double) encryption. Customer-managed keys are not supported by the storage module yet ([§14](#14-known-limitations-and-pending-azure-dependent-validation)). |
 | Encryption in transit | HTTPS only, TLS 1.2 minimum. |
-| Exposure | No public blob access, no cross-tenant replication, copy scope limited to the tenant (`AAD`). Public endpoint enabled by default (still Entra ID-authenticated). Restrict it with `allowed_ip_ranges`, or set `public_network_access = "Disabled"` and use a private endpoint. |
-| Deletion protection | `prevent_destroy` on the storage account (Terraform) plus a `CanNotDelete` management lock (Azure). |
+| Exposure | No public blob access, no cross-tenant replication, copy scope limited to the tenant (`AAD`). The module defaults to no public endpoint and a `Deny` firewall; the bootstrap opens the public endpoint (still Entra ID-authenticated) so that operators and hosted runners can reach the state. Restrict it with `allowed_ip_ranges`, or set `public_network_access = "Disabled"` and use a private endpoint. |
+| Deletion protection | `prevent_destroy` on the storage account (in the module) plus a `CanNotDelete` management lock (Azure). |
+| Implementation | Every control above is a setting of [`modules/storage_account`](modules/storage_account/README.md), called by `bootstrap/main.tf` with every input passed explicitly. |
 
 ## 7. Backend storage bootstrap procedure
 
@@ -314,52 +338,83 @@ PowerShell: use PowerShell 7+ (Windows PowerShell 5.1 writes UTF-16 with `>`,
 which Terraform cannot parse):
 `terraform output -raw backend_hcl | Set-Content -Encoding utf8NoBOM ..\environments\dev\backend.hcl`.
 
+With default inputs the plan adds **9** resources: the resource group, and in
+`module.state_storage` the storage account, 5 containers (`tfstate-bootstrap`,
+`-dev`, `-rec`, `-ppr`, `-prod`), the current-principal role assignment and the
+lock (+1 role assignment per `state_contributors` entry).
+
 Bootstrap inputs (all optional): `project` (`azinfra`), `location`
 (`francecentral`), `resource_group_name`, `storage_account_name`,
 `environments` (`["dev","rec","ppr","prod"]`), `state_contributors`,
 `grant_current_principal_access` (`true`), `account_replication_type` (`ZRS`),
 `blob_soft_delete_retention_days` / `container_soft_delete_retention_days`
-(`30`), `public_network_access` (`Enabled`), `allowed_ip_ranges` (`[]`),
-`delete_lock_enabled` (`true`), `tags`, `resource_providers_to_register`.
+(`30`), `public_network_access` (`Enabled`), `allowed_ip_ranges` (`[]`; public
+IPv4 addresses or CIDRs up to `/30`), `delete_lock_enabled` (`true`), `tags`,
+`resource_providers_to_register`. How each maps to the module inputs:
+[runbook 03 §2](docs/runbooks/03-backend-and-state-management.md#2-bootstrap-configuration-reference).
+The bootstrap outputs `security_configuration` for audits, besides the names and
+IDs listed above.
 
 **RBAC propagation:** the *Storage Blob Data Contributor* assignment can take
 several minutes to apply. A `403 AuthorizationPermissionMismatch` during the
 first `terraform init` of an environment usually means you need to wait and
 retry.
 
-### Bootstrap state
+### Bootstrap independence and state
 
-The bootstrap's own state is local (`bootstrap/terraform.tfstate`, ignored by
-Git). It holds sensitive attributes (the storage account keys, even though
-key-based access is disabled), so choose one of:
+The bootstrap **creates** the backend, so it never **uses** it:
 
-* **Option A: keep it local.** Store the file in a secured location (vault,
-  restricted ops share). If it is lost, re-import the handful of resources with
-  `terraform import`.
-* **Option B: migrate it into the backend it created.** Add the block below to
-  the `terraform {}` block of `bootstrap/versions.tf`, then migrate:
+* `bootstrap/versions.tf` has no `backend` block: `terraform init` needs no
+  storage account, and the configuration stays usable when the state account is
+  misconfigured, unreachable (firewall, `public_network_access = "Disabled"`,
+  missing role) or being rebuilt. `ci.py azure-config` fails the pipeline if a
+  `backend` or `cloud` block is added to `bootstrap/*.tf`.
+* Every object it manages goes through Azure Resource Manager (the module
+  creates containers with `storage_account_id`), so it needs no data-plane
+  access to the account either.
 
-  ```hcl
-  backend "azurerm" {
-    use_azuread_auth = true
-    container_name   = "tfstate-bootstrap"
-    key              = "bootstrap.tfstate"
-  }
-  ```
+Its state is the local file `bootstrap/terraform.tfstate` (ignored by Git). It
+holds sensitive attributes (the storage account keys, even though key-based
+access is disabled) and changes only when the bootstrap is applied. Keep it
+**outside** the state account it describes:
 
-  ```bash
-  terraform init -migrate-state \
-    -backend-config="storage_account_name=$(terraform output -raw storage_account_name)"
-  # verify with `terraform plan` (no changes expected), then delete the local
-  # terraform.tfstate and terraform.tfstate.backup files
-  ```
+1. After each bootstrap apply, copy `terraform.tfstate` to a secured location
+   that does not depend on this account: secret vault, restricted operations
+   share, or a storage account in another subscription.
+2. Before the next bootstrap change, restore the latest copy into `bootstrap/`
+   and check it with `terraform plan` (no unexpected change).
+3. If every copy is lost, the resources can be adopted again with `import`
+   blocks (runbook 03, BS-11): the names are deterministic.
+
+The `tfstate-bootstrap` container is reserved. Do not configure it as the
+bootstrap's backend: a bootstrap apply that removed your access to the account
+would then also lock you out of the state needed to repair it.
+
+**Transition of the other configurations to the Azure Blob backend:** each
+environment declares `backend "azurerm"` (partial configuration) and is
+initialised **after** the bootstrap, with the account name from
+`terraform output -raw backend_hcl` ([§6](#6-remote-backend-architecture),
+runbook 03 BS-02 and BS-05). Nothing is migrated: environments start directly
+on the remote backend.
+
+### Upgrading an existing bootstrap to the storage module
+
+Before the module existed, the bootstrap declared the account, containers,
+role assignments and lock directly. `bootstrap/moved.tf` maps those addresses
+to `module.state_storage.*`, keeping the same keys. On a state created by the
+earlier version, `terraform plan` reports each object as
+`has moved to module.state_storage...` and shows **0 to add, 0 to destroy**,
+with one in-place update: the module's `module = "storage_account"` tag on
+the account. Verified offline by applying the previous configuration with the
+mocked provider and planning the current one against that state.
 
 ### Removing the backend
 
-Deliberately multi-step: set `delete_lock_enabled = false` and apply, remove the
-`prevent_destroy` lifecycle rule, then destroy. The lock also blocks deleting
-child resources (state containers) and may block removing role assignments
-scoped to them, which is intended. Lift it temporarily for such changes.
+Deliberately multi-step: set `delete_lock_enabled = false` and apply, then lift
+the module's `prevent_destroy` (runbook 03, BS-14), then destroy. The lock also
+blocks deleting child resources (state containers) and may block removing role
+assignments scoped to them, which is intended. Lift it temporarily for such
+changes.
 
 ## 8. Required credentials and configuration variables
 
@@ -677,7 +732,7 @@ Run from `az-infra-generic/`:
 ```bash
 terraform fmt -check -recursive
 
-for d in bootstrap environments/dev modules/aks; do
+for d in bootstrap environments/dev modules/aks modules/storage_account; do
   (cd "$d" && terraform init -backend=false -input=false >/dev/null \
             && terraform validate && terraform test)
 done
@@ -692,9 +747,12 @@ Results at the time of writing (Terraform 1.17.2, azurerm 5.14.0):
 | Check | Scope | Result |
 |---|---|---|
 | `terraform fmt -check -recursive` | all | pass |
-| `terraform validate` | bootstrap, environments/dev, modules/aks | pass |
-| `terraform test` | `bootstrap` (7 runs) | 7 passed |
+| `terraform validate` | bootstrap, environments/dev, modules/aks, modules/storage_account | pass |
+| `terraform test` | `bootstrap` (9 runs, one mocked apply checking the role assignment scopes) | 9 passed |
 | `terraform test` | `modules/aks` (cluster 15, network 19, node pools 16, security/observability 14, outputs/access 6) | 70 passed |
+| `terraform test` | `modules/storage_account` (account 13, security 10, containers 11, access 7), with Terraform 1.17.2 and 1.9.8 | 41 passed |
+| Bootstrap state migration | previous inline bootstrap applied with the mocked provider, current one planned against that state (`terraform test -verbose`, `state_key`) | every object moved; 0 to add, 0 to destroy, 1 tag update |
+| Storage module README examples | the three `module` blocks of `modules/storage_account/README.md` (+ private endpoint), planned in a temporary harness with the mocked provider | fmt + validate + plan pass |
 | `terraform test` | `environments/dev` (2 runs, using `terraform.tfvars`) | 2 passed |
 | Lock files | init with the committed lock file | unchanged, 4 platforms |
 | README examples ([§10](#10-usage-examples)) | the two `module "aks"` blocks, planned in a temporary harness with the mocked provider (placeholder group ID replaced by a GUID, `container_registry_ids` line excluded, see [§14](#14-known-limitations-and-pending-azure-dependent-validation)) | validate + plan pass |
@@ -710,13 +768,27 @@ TFLint (`.tflint.hcl`), Gitleaks, Trivy (`.trivyignore.yaml`) and Checkov
 (`.checkov.yaml`, stricter `.checkov-prod.yaml` for production plans) run in
 the `az-infra-generic` GitHub Actions workflow, together with Azure static
 checks of the provider/backend configuration. See
-[`docs/ci-cd.md`](../docs/ci-cd.md). They were not executed on the authoring
-machine (tools unavailable there): their first CI run establishes the
-findings baseline. Locally, on Linux/WSL:
+[`docs/ci-cd.md`](../docs/ci-cd.md). Locally, on Linux/WSL:
 
 ```bash
 ci/scripts/install-tools.sh && ci/scripts/run-local.sh az-infra-generic   # from the repository root
 ```
+
+First local run (WSL, pinned tool versions of `ci/tool-versions.env`, fresh
+clone), when the Storage Account module was added:
+
+| Tool | Result |
+|---|---|
+| TFLint 0.66.0 | pass (every root, local modules included) |
+| Gitleaks 8.30.1 | no leak (full history) |
+| Trivy 0.76.2 | HIGH/CRITICAL gate passes (`AVD-AZU-0012` accepted, path `modules/storage_account/main.tf`). Non-blocking LOW/MEDIUM findings on the state account: `AZU-0057` (no blob logging), `AZU-0058` (ZRS, not geo-redundant), `AZU-0060` (no customer-managed key), all known limitations below |
+| Checkov 3.4.5 | storage account and containers: no unaccepted finding (account checks such as `CKV_AZURE_190`, `CKV_AZURE_36`, `CKV_AZURE_44` and the custom `CKV2_AZINFRA_1` pass; `CKV_AZURE_206`, `CKV2_AZURE_21` and the `CKV_AZURE_34` false positive are accepted in `.checkov.yaml`). **The gate still fails** on 3 findings that predate the module: `CKV_AZURE_232` and `CKV_AZURE_172` (AKS module), `CKV2_AZURE_31` (dev node subnet without NSG): fix or accept them |
+| actionlint 1.7.12 | fails on the custom self-hosted runner labels `wsl` / `microk8s` of `.github/workflows/tp-local.yml` (an `actionlint.yaml` declaring them is missing); unrelated to this project |
+| ShellCheck | not run (not installed on the validation machine) |
+
+Checkov parses Terraform with python-hcl2, which rejects comments inside
+multi-line expressions: keep comments outside expressions, or the whole file is
+skipped (`Parsing errors: 1`).
 
 ### Azure-dependent validation (pending)
 
@@ -728,9 +800,17 @@ cd environments/dev && terraform apply dev.tfplan                       # real d
 ```
 
 Module minimum version check (declared `>= 1.9.0`): the pipeline's
-"minimum Terraform version" job validates and tests `modules/aks` with
-Terraform 1.9.8; locally:
-`tfenv use 1.9.8 && cd modules/aks && terraform init -backend=false && terraform validate && terraform test`.
+"minimum Terraform version" job validates and tests `modules/aks` and
+`modules/storage_account` with Terraform 1.9.8; locally:
+`tfenv use 1.9.8 && cd modules/storage_account && terraform init -backend=false && terraform validate && terraform test`
+(same for `modules/aks`).
+
+Storage Account module checks that need Azure (pending): the bootstrap's
+first `terraform plan`/`apply` (9 resources), `terraform plan` again (no
+drift: Optional+Computed attributes such as `access_tier`, network rule sets
+and blob properties must not show a diff), the `az` checks of
+[runbook 03 BS-01](docs/runbooks/03-backend-and-state-management.md#bs-01-bootstrap-the-backend),
+and a first `terraform init` of `environments/dev` against the new account.
 
 ## 13. Troubleshooting
 
@@ -738,6 +818,8 @@ Terraform 1.9.8; locally:
 |---|---|---|
 | `403 AuthorizationPermissionMismatch` on `terraform init` | Data-plane role not yet propagated or missing; IP filtering on the state account | Wait a few minutes; check *Storage Blob Data Contributor* on `tfstate-<env>`; add your IP to `allowed_ip_ranges` |
 | `KeyBasedAuthenticationNotPermitted` from the backend | Backend trying key-based authentication | Keep `use_azuread_auth = true` in `backend.tf`; do not set `ARM_ACCESS_KEY` |
+| Bootstrap plan: `Instance cannot be destroyed` on `module.state_storage.azurerm_storage_account.this`, or containers to create | An input that replaces the account changed, the bootstrap state is missing, or a pre-module state without `moved.tf` | Revert the input; restore the bootstrap state; runbook 03 BS-11 / BS-15 |
+| Storage module validation error (kind/tier, replication, IP rule, container name) | Unsupported combination or Azure naming rule | See [module README](modules/storage_account/README.md#troubleshooting) |
 | `Error acquiring the state lock` | Another run in progress, or a killed run left a lease | Make sure nothing runs, then `terraform force-unlock <LOCK_ID>` |
 | `MissingSubscriptionRegistration` | Resource provider not registered | Register it ([§4](#4-azure-prerequisites)) or let the provider do it via `resource_providers_to_register` |
 | `AuthorizationFailed` on `azurerm_role_assignment` | Deployer lacks role-assignment rights | Grant *Role Based Access Control Administrator* / *User Access Administrator* |
@@ -766,20 +848,21 @@ Terraform 1.9.8; locally:
 | Area | Ready | Pending (needs Azure) |
 |---|---|---|
 | Version pinning, lock files | ✅ | — |
-| Bootstrap configuration | ✅ validated + 7 offline tests | `terraform apply` |
+| Bootstrap configuration | ✅ validated + 9 offline tests; uses the Storage Account module; migration of a pre-module state simulated | `terraform apply` |
+| Storage Account module | ✅ validated + 41 offline tests (Terraform 1.17.2 and 1.9.8); README examples planned | real plan/apply through the bootstrap, drift check, `az` checks (runbook 03 BS-01) |
 | Backend configuration (`backend.tf`) | ✅ | `backend.hcl` (from bootstrap output), first `terraform init` |
 | AKS module | ✅ validated + 70 offline tests | real plan/apply; Azure-side checks (quotas, SKU/zone availability, policy compliance, RBAC propagation) |
 | dev environment | ✅ validated + 2 offline tests | `TODO(azure-access)` values, plan/apply, `kubectl` smoke test |
 | rec / ppr / prod | directories only | created from dev ([§2](#adding-an-environment-rec-ppr-prod)) |
-| TFLint, Gitleaks, Trivy, Checkov | run by the CI pipeline | first CI run (findings baseline: fix or accept explicitly) |
-| Module on Terraform 1.9.x | CI minimum-version job | first CI run |
+| TFLint, Gitleaks, Trivy, Checkov | run locally on WSL ([§12](#12-validation-commands)): TFLint, Gitleaks and the Trivy gate pass; Checkov has 3 pre-existing findings outside the storage scope | first CI run; decision on `CKV_AZURE_232`, `CKV_AZURE_172`, `CKV2_AZURE_31` |
+| Modules on Terraform 1.9.x | `modules/storage_account` and `modules/aks` tests pass locally with 1.9.8; CI minimum-version job for both | first CI run |
 | CI/CD plan/apply | implemented ([`docs/ci-cd.md`](../docs/ci-cd.md)) | Azure identities + GitHub environments, then `AZURE_DEPLOYMENT_ENABLED=true` |
 
 ### Steps to complete the initial deployment when Azure access is granted
 
 1. Obtain an identity with the rights of [§4](#4-azure-prerequisites) and authenticate ([§5](#5-azure-authentication-setup)).
 2. Check region capacity: DDSv5 vCPU quota and availability zones in `francecentral` ([§4](#4-azure-prerequisites)).
-3. Run the bootstrap and generate `environments/dev/backend.hcl` ([§7](#7-backend-storage-bootstrap-procedure)); commit `backend.hcl`.
+3. Run the bootstrap and generate `environments/dev/backend.hcl` ([§7](#7-backend-storage-bootstrap-procedure)); commit `backend.hcl`; copy the bootstrap state to a secured location outside the state account.
 4. Fill the placeholders of `environments/dev/terraform.tfvars` ([§8](#8-required-credentials-and-configuration-variables)): admin group(s), authorized IP ranges, optionally the Kubernetes version.
 5. `terraform init -backend-config=backend.hcl`, `terraform plan -out=dev.tfplan`, review, `terraform apply dev.tfplan` ([§11](#11-deployment-procedure)).
 6. Smoke test: `kubectl get nodes`, `kubectl get pods -A`, data visible in Container Insights, control plane logs in the `AKSAuditAdmin` / `AKSControlPlane` tables.
@@ -792,4 +875,5 @@ Terraform 1.9.8; locally:
 * Not included: Managed Prometheus / Grafana, API server VNet integration, Istio service mesh, application routing, a bring-your-own kubelet identity, Node Auto-Provisioning, a custom NSG on the node subnet, a private endpoint for the state account.
 * Single region per environment; multi-region or disaster-recovery topology is out of scope.
 * The `CanNotDelete` lock on the state account also blocks deleting state containers (and possibly revoking role assignments scoped to them) until it is lifted.
+* Storage Account module: no private endpoint or private DNS (the caller creates them), no customer-managed keys, no diagnostic settings (blob logging), no lifecycle management or immutability policies, no hierarchical namespace (ADLS Gen2), SFTP, NFS or static website. `prevent_destroy` is part of the module and applies to every caller. Minimum TLS version is fixed at `TLS1_2` (the only value azurerm 5.14 accepts).
 * The AcrPull assignment (`container_registry_ids`) is covered by `terraform validate` but not by the offline tests: mocked providers cannot populate the computed `kubelet_identity` block.

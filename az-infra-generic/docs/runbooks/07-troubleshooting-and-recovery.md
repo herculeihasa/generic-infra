@@ -291,6 +291,15 @@ destroys its workloads and is the last resort.
    resources with `import` blocks for every address of
    [01 §3.2](01-architecture.md#32-resources-of-the-dev-environment)
    (12 resources for dev), then `terraform plan` until it shows no change.
+3. **Bootstrap state** (local file, never in the backend): restore the latest
+   copy kept outside the state account, or re-import the state storage with
+   [03 BS-11](03-backend-and-state-management.md#bs-11-store-back-up-and-recover-the-bootstrap-state)
+   step 4. A bootstrap plan that wants to **create** the account or containers
+   means the state is missing or does not match: stop and recover it first.
+   A plan that wants to **replace** `module.state_storage.azurerm_storage_account.this`
+   fails on `prevent_destroy`: revert the input, or follow
+   [03 BS-15](03-backend-and-state-management.md#bs-15-upgrade-an-existing-bootstrap-state-to-the-storage-module)
+   for a state created before the storage module.
 
 ## R-05 Rebuild the dev environment from scratch
 
