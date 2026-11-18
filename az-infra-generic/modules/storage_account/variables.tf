@@ -195,3 +195,144 @@ variable "network_rules" {
     error_message = "network_rules.virtual_network_subnet_ids must be subnet resource IDs."
   }
 }
+
+# =============================================================================
+# Blob data protection
+# =============================================================================
+
+variable "blob_properties" {
+  description = <<-EOT
+    Blob service data protection:
+    - versioning_enabled: keep every previous version of a blob when it is overwritten or deleted (default true).
+    - delete_retention_days: soft delete of blobs and versions, 1-365 days; 0 disables it (default 30).
+    - container_delete_retention_days: soft delete of containers, 1-365 days; 0 disables it (default 30).
+  EOT
+  type = object({
+    versioning_enabled              = optional(bool, true)
+    delete_retention_days           = optional(number, 30)
+    container_delete_retention_days = optional(number, 30)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition = alltrue([
+      for days in [var.blob_properties.delete_retention_days, var.blob_properties.container_delete_retention_days] :
+      days == 0 || (days >= 1 && days <= 365 && floor(days) == days)
+    ])
+    error_message = "blob_properties retention days must be whole numbers between 1 and 365, or 0 to disable soft delete."
+  }
+}
+
+# =============================================================================
+# Blob containers
+# =============================================================================
+
+variable "containers" {
+  description = <<-EOT
+    Blob containers, keyed by a stable identifier (used in resource addresses and in role_assignments[*].container_key, so renaming a key recreates the container):
+    - name: container name, 3-63 characters (lowercase letters, digits, single hyphens); defaults to the key.
+    - access_type: private (default, Entra ID-authorized access only), blob (anonymous read of blobs) or container (anonymous read and list). Anything but private requires blob_public_access_enabled = true.
+    - metadata: name/value pairs; names must be lowercase identifiers (letters, digits, underscores, not starting with a digit).
+  EOT
+  type = map(object({
+    name        = optional(string)
+    access_type = optional(string, "private")
+    metadata    = optional(map(string), {})
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition = alltrue([
+      for key, c in var.containers :
+      can(regex("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", coalesce(c.name, key))) && !strcontains(coalesce(c.name, key), "--")
+    ])
+    error_message = "Container names (name, or the key when name is omitted) must be 3-63 lowercase letters, digits or single hyphens, starting and ending with a letter or digit."
+  }
+
+  validation {
+    condition     = length(distinct([for key, c in var.containers : coalesce(c.name, key)])) == length(var.containers)
+    error_message = "Two containers resolve to the same name."
+  }
+
+  validation {
+    condition     = alltrue([for c in values(var.containers) : contains(["private", "blob", "container"], c.access_type)])
+    error_message = "Container access_type must be private, blob or container."
+  }
+
+  validation {
+    condition     = var.blob_public_access_enabled || alltrue([for c in values(var.containers) : c.access_type == "private"])
+    error_message = "Public container access (access_type blob or container) requires blob_public_access_enabled = true."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for c in values(var.containers) : [for k in keys(c.metadata) : can(regex("^[a-z_][a-z0-9_]*$", k))]
+    ]))
+    error_message = "Container metadata names must be lowercase identifiers: letters, digits and underscores, not starting with a digit."
+  }
+}
+
+# =============================================================================
+# Access control (Azure RBAC)
+# =============================================================================
+
+variable "role_assignments" {
+  description = <<-EOT
+    Azure RBAC role assignments, keyed by a stable identifier. With Shared Key disabled, data-plane access requires a data role such as "Storage Blob Data Contributor" (read/write, e.g. Terraform state) or "Storage Blob Data Reader".
+    - principal_id: object ID of the user, group, service principal or managed identity.
+    - role_definition_name: built-in or custom role name.
+    - container_key: key in var.containers to scope the assignment to that container only (least privilege); null scopes it to the whole account.
+    - description: optional free text stored on the assignment.
+  EOT
+  type = map(object({
+    principal_id         = string
+    role_definition_name = string
+    container_key        = optional(string)
+    description          = optional(string)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition = alltrue([
+      for ra in values(var.role_assignments) :
+      can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", ra.principal_id))
+    ])
+    error_message = "role_assignments principal_id values must be object IDs (GUIDs)."
+  }
+
+  validation {
+    condition     = alltrue([for ra in values(var.role_assignments) : length(trimspace(ra.role_definition_name)) > 0])
+    error_message = "role_assignments role_definition_name must not be empty."
+  }
+
+  validation {
+    condition     = alltrue([for ra in values(var.role_assignments) : ra.container_key == null || contains(keys(var.containers), coalesce(ra.container_key, "-"))])
+    error_message = "role_assignments container_key must be null (account scope) or a key of var.containers."
+  }
+}
+
+# =============================================================================
+# Deletion protection
+# =============================================================================
+
+variable "delete_lock_enabled" {
+  description = "Place a CanNotDelete management lock on the storage account, in addition to the module's prevent_destroy. Needs Microsoft.Authorization/locks/* (Owner or User Access Administrator). While it exists, deleting the account or one of its containers through Azure Resource Manager fails; blob data-plane operations are not affected."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "delete_lock_notes" {
+  description = "Notes stored on the management lock (why it exists, how to remove it)."
+  type        = string
+  default     = "Protects the storage account and its containers from deletion. Remove deliberately (delete_lock_enabled = false) before any decommissioning."
+  nullable    = false
+
+  validation {
+    condition     = length(var.delete_lock_notes) <= 512
+    error_message = "delete_lock_notes must be at most 512 characters."
+  }
+}

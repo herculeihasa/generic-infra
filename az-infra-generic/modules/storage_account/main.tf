@@ -5,7 +5,8 @@
 #   versions.tf    Terraform / provider minimum versions (no provider block)
 #   variables.tf   Module interface (inputs, defaults, validations)
 #   locals.tf      Derived values
-#   main.tf        The storage account
+#   main.tf        The storage account, its blob containers, optional Azure
+#                  RBAC role assignments and optional CanNotDelete lock
 #   outputs.tf     Module outputs (no access keys, no connection strings)
 #   tests/         Offline `terraform test` suites (mocked azurerm provider)
 #
@@ -66,15 +67,25 @@ resource "azurerm_storage_account" "this" {
   }
 
   # --- Recovery -----------------------------------------------------------------
+  # Versioning + soft delete allow recovering any previous revision of a blob
+  # and a deleted container. 0 days omits the policy (soft delete disabled).
   blob_properties {
-    versioning_enabled = true
+    versioning_enabled = var.blob_properties.versioning_enabled
 
-    delete_retention_policy {
-      days = 30
+    dynamic "delete_retention_policy" {
+      for_each = var.blob_properties.delete_retention_days > 0 ? [var.blob_properties.delete_retention_days] : []
+
+      content {
+        days = delete_retention_policy.value
+      }
     }
 
-    container_delete_retention_policy {
-      days = 30
+    dynamic "container_delete_retention_policy" {
+      for_each = var.blob_properties.container_delete_retention_days > 0 ? [var.blob_properties.container_delete_retention_days] : []
+
+      content {
+        days = container_delete_retention_policy.value
+      }
     }
   }
 
@@ -84,4 +95,40 @@ resource "azurerm_storage_account" "this" {
     # cannot be driven by a variable).
     prevent_destroy = true
   }
+}
+
+# Containers are created through Azure Resource Manager (storage_account_id),
+# so they need neither Shared Key nor data-plane network access.
+resource "azurerm_storage_container" "this" {
+  for_each = var.containers
+
+  name                  = coalesce(each.value.name, each.key)
+  storage_account_id    = azurerm_storage_account.this.id
+  container_access_type = each.value.access_type
+  metadata              = each.value.metadata
+}
+
+resource "azurerm_role_assignment" "this" {
+  for_each = var.role_assignments
+
+  scope                = each.value.container_key == null ? azurerm_storage_account.this.id : azurerm_storage_container.this[each.value.container_key].id
+  role_definition_name = each.value.role_definition_name
+  principal_id         = each.value.principal_id
+  description          = each.value.description
+}
+
+resource "azurerm_management_lock" "this" {
+  count = var.delete_lock_enabled ? 1 : 0
+
+  name       = "lock-${azurerm_storage_account.this.name}-nodelete"
+  scope      = azurerm_storage_account.this.id
+  lock_level = "CanNotDelete"
+  notes      = var.delete_lock_notes
+
+  # Create the lock last so it never blocks the initial provisioning (a
+  # CanNotDelete lock also blocks container deletion).
+  depends_on = [
+    azurerm_storage_container.this,
+    azurerm_role_assignment.this,
+  ]
 }
