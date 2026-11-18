@@ -44,8 +44,8 @@ environment on a Windows workstation.
 | # | Runbook | Covers |
 |---|---|---|
 | 01 | [Architecture](01-architecture.md) | Windows/WSL/MicroK8s/Terraform/Kubernetes/Helm layers, state, kubeconfig, add-ons, ownership |
-| 02 | WSL initial setup (in progress) | Windows prerequisites, WSL2, Ubuntu, packages, Terraform, first cluster bootstrap, access |
-| 03 | MicroK8s operations (in progress) | Readiness, services, nodes, pods, logs, add-ons, start/stop |
+| 02 | [WSL initial setup](02-wsl-initial-setup.md) | Windows prerequisites, WSL2, Ubuntu, packages, Terraform, first cluster bootstrap, access |
+| 03 | [MicroK8s operations](03-microk8s-operations.md) | Readiness, services, nodes, pods, logs, add-ons, start/stop |
 | 04 | Terraform operations (in progress) | Both stages: init, plan, apply, outputs, state, destroy, ordering |
 | 05 | Kubernetes and Helm (in progress) | Namespaces, RBAC, resources, Helm releases, health |
 | 06 | CI/CD and local deployment (in progress) | Hosted vs self-hosted runner, WSL runner, approvals |
@@ -76,3 +76,10 @@ Values come from the code (defaults of `bootstrap/variables.tf`,
 | I need to… | Go to |
 |---|---|
 | Understand the layers and who manages what | [01 Architecture](01-architecture.md) |
+| Set up a new workstation from scratch | [02 SET-01..11](02-wsl-initial-setup.md) |
+| Install MicroK8s the first time | [02 SET-07](02-wsl-initial-setup.md#set-07-install-microk8s-with-terraform-stage-1) |
+| Use kubectl (WSL or Windows) | [02 SET-10](02-wsl-initial-setup.md#set-10-configure-kubernetes-access) |
+| Check that the cluster is healthy | [03 MK-01](03-microk8s-operations.md#mk-01-check-cluster-readiness) |
+| Look at services, pods and logs | [03 MK-02..05](03-microk8s-operations.md#mk-02-check-microk8s-services) |
+| Stop, start or restart MicroK8s | [03 MK-06 / MK-07](03-microk8s-operations.md#mk-06-stop-and-start-the-cluster) |
+| Enable or disable an add-on | [03 MK-08](03-microk8s-operations.md#mk-08-manage-add-ons) |
