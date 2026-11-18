@@ -1,0 +1,66 @@
+# Repository-wide pre-commit checks (docs/pre-commit.md): the commit-stage
+# hooks of .pre-commit-config.yaml on every file, so a developer who skipped
+# them locally is still caught. This is where outdated generated
+# documentation (terraform-docs) and Markdown lint fail the pipeline.
+#
+# Terraform validation, TFLint, tests and security scans are NOT repeated
+# here: the per-project pipelines run them (_terraform-quality.yml).
+#
+# Conventions enforced by ci/tests/test_workflows.py: actions pinned by commit
+# SHA, no ${{ }} in run scripts, checkout without persisted credentials.
+name: pre-commit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-commit-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pre-commit:
+    name: "hygiene, formatting, docs, lint (pre-commit)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # Covered by dedicated jobs of the project pipelines: Gitleaks scans the
+      # commits there, actionlint runs in "workflow lint".
+      SKIP: gitleaks,actionlint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read pinned versions
+        id: versions
+        run: |
+          source ci/tool-versions.env
+          {
+            echo "terraform=$(tr -d '[:space:]' < az-infra-generic/.terraform-version)"
+            echo "pre-commit=${PRE_COMMIT_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Install pre-commit (pinned)
+        env:
+          PRE_COMMIT_VERSION: ${{ steps.versions.outputs.pre-commit }}
+        run: pipx install "pre-commit==${PRE_COMMIT_VERSION}"
+
+      - name: Commit-stage hooks on every file
+        run: pre-commit run --all-files --show-diff-on-failure --color always

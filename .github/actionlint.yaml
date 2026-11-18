@@ -1,0 +1,8 @@
+# actionlint configuration (CI: ci/scripts/lint.sh repo workflows; pre-commit
+# hook "actionlint").
+self-hosted-runner:
+  # Custom labels of the self-hosted runner that runs inside WSL next to the
+  # tp-local MicroK8s cluster (.github/workflows/tp-local.yml, docs/ci-cd.md).
+  labels:
+    - wsl
+    - microk8s

@@ -188,6 +188,26 @@ repos:
         stages: [manual]
 
   # ---------------------------------------------------------------------------
+  # GitHub Actions workflows (commit; .github/actionlint.yaml) and the CI
+  # unit tests (push: helpers, workflow and security policy tests, docs).
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: ci-unit-tests
+        name: CI unit tests (ci/tests)
+        entry: python -m unittest discover -s ci/tests
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        files: ^(ci/|\.github/|[^/]+/(bootstrap|environments|modules)/|\.pre-commit-config\.yaml$|\.gitleaks\.toml$|(.+/)?\.checkov[^/]*\.yaml$|.+/\.trivyignore\.yaml$|.+\.md$)
+        pass_filenames: false
+        stages: [pre-push, manual]
+
+  # ---------------------------------------------------------------------------
   # Shell scripts (same options as ci/scripts/lint.sh: severity >= warning)
   # ---------------------------------------------------------------------------
   - repo: https://github.com/shellcheck-py/shellcheck-py
