@@ -35,7 +35,7 @@ storage that holds the Terraform remote state of every environment.
 
 ## Architecture
 
-```
+```text
 module "<name>"  (modules/storage_account)
 ├── azurerm_storage_account.this                StorageV2/Standard (default) or BlockBlobStorage/Premium
 │     ├── blob_properties                       versioning, blob + container soft delete
@@ -430,7 +430,7 @@ No modules.
 | location | Azure region of the storage account, as configured. |
 | management\_lock\_id | ID of the CanNotDelete management lock, null when delete\_lock\_enabled = false. |
 | name | Name of the storage account. |
-| primary\_blob\_endpoint | Primary blob service endpoint (https://<name>.blob.core.windows.net/). |
+| primary\_blob\_endpoint | Primary blob service endpoint (`https://<name>.blob.core.windows.net/`). |
 | primary\_blob\_host | Primary blob service host name, e.g. for firewall or private DNS rules. |
 | primary\_location | Primary region reported by Azure. |
 | resource\_group\_name | Resource group of the storage account. |

@@ -34,7 +34,7 @@ variable "dns_prefix" {
 }
 
 variable "node_resource_group_name" {
-  description = "Name of the AKS-managed node resource group (must not exist yet). Defaults to the AKS naming (MC_<rg>_<cluster>_<region>). Forces a new cluster when changed."
+  description = "Name of the AKS-managed node resource group (must not exist yet). Defaults to the AKS naming (`MC_<rg>_<cluster>_<region>`). Forces a new cluster when changed."
   type        = string
   default     = null
 }
@@ -208,7 +208,7 @@ variable "identity_type" {
 }
 
 variable "user_assigned_identity" {
-  description = "Existing user-assigned identity for the control plane ({ id, principal_id }). Null with identity_type = UserAssigned makes the module create one named id-<cluster name>. Bring your own when it must hold permissions before the module runs (e.g. Private DNS Zone Contributor on a custom zone)."
+  description = "Existing user-assigned identity for the control plane ({ id, principal_id }). Null with identity_type = UserAssigned makes the module create one named `id-<cluster name>`. Bring your own when it must hold permissions before the module runs (e.g. Private DNS Zone Contributor on a custom zone)."
   type = object({
     id           = string
     principal_id = string
@@ -394,7 +394,7 @@ variable "private_cluster_enabled" {
 }
 
 variable "private_dns_zone_id" {
-  description = "Private cluster DNS: \"System\" (AKS-managed zone), \"None\" (bring your own DNS resolution) or the resource ID of an existing privatelink.<region>.azmk8s.io zone. A custom zone requires a user-assigned identity that already holds Private DNS Zone Contributor on it (pass it via user_assigned_identity). Ignored for public clusters."
+  description = "Private cluster DNS: \"System\" (AKS-managed zone), \"None\" (bring your own DNS resolution) or the resource ID of an existing `privatelink.<region>.azmk8s.io` zone. A custom zone requires a user-assigned identity that already holds Private DNS Zone Contributor on it (pass it via user_assigned_identity). Ignored for public clusters."
   type        = string
   default     = "System"
 

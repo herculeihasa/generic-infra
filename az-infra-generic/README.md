@@ -50,7 +50,7 @@ Design principles:
 
 ## 2. Architecture and directory structure
 
-```
+```text
 az-infra-generic/
 ├── .terraform-version        # exact Terraform CLI version (tfenv / tenv / CI)
 ├── .tflint.hcl               # TFLint configuration (terraform + azurerm rulesets)
@@ -98,7 +98,7 @@ az-infra-generic/
 
 Layering and dependencies:
 
-```
+```text
 bootstrap/  (local state)
    ├── azurerm_resource_group            rg-<project>-tfstate-<region>
    └── module "state_storage"  (modules/storage_account)
@@ -277,7 +277,7 @@ Two configurations play distinct roles:
 | Run | Once per subscription/tenant, by an operator | Every deployment (operator or CI/CD) |
 | Required rights | Owner, or Contributor + User Access Administrator | Contributor (+ RBAC Administrator) on the target scope + *Storage Blob Data Contributor* on its state container |
 
-```
+```text
 Subscription
 └── rg-<project>-tfstate-<region>                 created by bootstrap/
     └── st<project>tfstate<hash6>                 modules/storage_account: StorageV2, ZRS, Entra ID only

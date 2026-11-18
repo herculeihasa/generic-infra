@@ -141,6 +141,26 @@ repos:
         require_serial: true
 
   # ---------------------------------------------------------------------------
+  # Markdown quality (commit): style rules (markdownlint, .markdownlint-cli2.yaml)
+  # and documentation consistency (ci/tests/test_docs.py: relative links and
+  # anchors, Mermaid syntax, referenced files and Terraform addresses in
+  # runbooks, runbook structure).
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.24.0
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: local
+    hooks:
+      - id: docs-consistency
+        name: documentation links, anchors, references, Mermaid (test_docs.py)
+        entry: python ci/tests/test_docs.py
+        language: python
+        files: \.(md|tf)$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Misconfiguration scanners (manual; CI runs them on every change). Same
   # configuration as CI: <project>/.trivyignore.yaml, <project>/.checkov.yaml,
   # ci/policies/checkov, and /.checkov.yaml for the workflows.

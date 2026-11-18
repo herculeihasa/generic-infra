@@ -40,7 +40,7 @@ Helm, CI/CD, troubleshooting and recovery, maintenance) are in the
 | Namespaces, RBAC, service accounts, quotas, network policies, storage | **WSL Ubuntu** | Terraform **stage 2** [`environments/dev/`](environments/dev) (`main.tf`) → [`modules/k8s-namespace`](modules/k8s-namespace) | Platform baseline through the Kubernetes provider |
 | Applications (Helm charts) | **WSL Ubuntu** | Terraform stage 2 (`helm.tf`), Helm provider | Application layer, applied on top of the baseline |
 
-```
+```text
 Windows host
 └── WSL2 VM ── Ubuntu 24.04 (systemd)
     ├── snap: microk8s ◄── stage 1: tp-local/bootstrap (terraform_data + scripts)
@@ -72,7 +72,7 @@ runs and a self-hosted CI runner (same Linux user) share one state.
 
 ## 2. Directory structure
 
-```
+```text
 tp-local/
 ├── .terraform-version   .tflint.hcl   .gitignore   .gitattributes (LF: scripts run in WSL)
 ├── bootstrap/                     # stage 1 (no provider, no lock file)

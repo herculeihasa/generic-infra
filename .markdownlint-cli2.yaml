@@ -1,0 +1,41 @@
+# markdownlint-cli2 configuration (pre-commit hook "markdownlint-cli2").
+# Rules: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+#
+# Every rule is on except the ones below, relaxed on purpose for technical
+# documentation (wide tables, commands, procedure templates). Structural
+# checks that markdownlint cannot do (links, anchors, Mermaid, references to
+# files and Terraform addresses) are in ci/tests/test_docs.py.
+config:
+  default: true
+
+  # Line length: tables, commands and URLs cannot be wrapped.
+  MD013: false
+
+  # Same heading text is fine in different sections (e.g. "Validation" in
+  # each runbook procedure), not twice under the same parent.
+  MD024:
+    siblings_only: true
+
+  # Inline HTML: only the line break used inside table cells.
+  MD033:
+    allowed_elements: [br]
+
+  # "**Status:** ..." labels are emphasis, not headings.
+  MD036: false
+
+  # Fenced code blocks only (a language is required by MD040).
+  MD046:
+    style: fenced
+
+  # One list marker style per file (the docs use "*" and "-" in different files).
+  MD004:
+    style: consistent
+
+  # Table pipe spacing is cosmetic: hand-written tables use `|---|` delimiter
+  # rows, terraform-docs writes `| --- |`. Table structure (leading/trailing
+  # pipes, column count) stays checked by MD055 and MD056.
+  MD060: false
+
+ignores:
+  - "**/.terraform/**"
+  - "**/node_modules/**"

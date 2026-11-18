@@ -26,7 +26,7 @@ repository moved to Azure Repos.
 
 ## 2. Architecture
 
-```
+```text
 .github/workflows/
 ├── az-infra-generic.yml      caller: triggers + Azure-specific plan/apply jobs
 ├── tp-local.yml              caller: triggers + WSL self-hosted jobs

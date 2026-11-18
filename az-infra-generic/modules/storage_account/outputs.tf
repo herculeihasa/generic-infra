@@ -58,7 +58,7 @@ output "access_tier" {
 # =============================================================================
 
 output "primary_blob_endpoint" {
-  description = "Primary blob service endpoint (https://<name>.blob.core.windows.net/)."
+  description = "Primary blob service endpoint (`https://<name>.blob.core.windows.net/`)."
   value       = azurerm_storage_account.this.primary_blob_endpoint
 }
 
