@@ -41,8 +41,8 @@ recover the infrastructure without prior knowledge of the project.
 | # | Runbook | Covers |
 |---|---|---|
 | 01 | [Architecture](01-architecture.md) | Components, diagrams, files, providers, environments, naming, lifecycle |
-| 02 | Prerequisites and initial setup (in progress) | Tools, Azure authentication, permissions, environment variables, initialization |
-| 03 | Backend and state management (in progress) | State bootstrap, locking, isolation, inspection, backup, recovery, migration |
+| 02 | [Prerequisites and initial setup](02-prerequisites-and-setup.md) | Tools, Azure authentication, permissions, environment variables, initialization |
+| 03 | [Backend and state management](03-backend-and-state-management.md) | State bootstrap, locking, isolation, inspection, backup, recovery, migration |
 | 04 | AKS module operations (in progress) | Module interface, create, update, scale, upgrade, access, destroy |
 | 05 | Deployment procedures (in progress) | Full Terraform lifecycle, local and pipeline execution |
 | 06 | CI/CD operations (in progress) | Pipeline stages, gates, approvals, Azure authentication, troubleshooting |
@@ -76,3 +76,9 @@ exist after deployment are placeholders.
 | I need to… | Go to |
 |---|---|
 | Understand what gets deployed | [01 Architecture](01-architecture.md) |
+| Prepare a workstation and log in to Azure | [02 SETUP-01..04](02-prerequisites-and-setup.md) |
+| Check my Azure permissions | [02 §2](02-prerequisites-and-setup.md#2-required-azure-permissions) |
+| Create the Terraform state storage (first time) | [03 BS-01](03-backend-and-state-management.md#bs-01-bootstrap-the-backend) |
+| Connect an environment to its state | [03 BS-05](03-backend-and-state-management.md#bs-05-initialize-an-environment-against-the-backend) |
+| Release a stuck state lock | [03 BS-10](03-backend-and-state-management.md#bs-10-release-a-stuck-state-lock) |
+| Restore a previous state version | [03 BS-08](03-backend-and-state-management.md#bs-08-restore-a-previous-state-version) |
