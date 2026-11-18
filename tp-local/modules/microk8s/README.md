@@ -36,27 +36,9 @@ module "microk8s" {
 }
 ```
 
-## Inputs
+## Inputs and outputs
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `channel` | string | `"1.35/stable"` | Snap channel `<track>/<risk>` (e.g. `1.36/stable`, `1.35-strict/stable`). Changes are applied with `snap refresh`. |
-| `addons` | map(object({ args = list(string) })) | `{}` | Add-ons to enable; removing an entry disables it. Names and arguments are validated (no shell metacharacters). |
-| `kubeconfig_path` | string | `"~/.kube/tp-local-microk8s.yaml"` | Exported admin kubeconfig (0600). |
-| `api_server_address` | string | `"127.0.0.1"` | Address written in the kubeconfig (stable across WSL IP changes, in the certificate SANs). |
-| `wait_timeout_seconds` | number | `600` | Timeout of each readiness wait (60-3600). |
-| `uninstall_on_destroy` | bool | `false` | Remove MicroK8s and **all cluster data** on destroy. |
-
-## Outputs
-
-| Name | Description |
-|---|---|
-| `channel` | Tracked snap channel. |
-| `addons` | Managed add-ons (sorted). |
-| `kubeconfig_path` | Absolute kubeconfig path. |
-| `kubeconfig_context` | `microk8s`. |
-| `api_server_url` | `https://<api_server_address>:16443`. |
-| `install_id` | ID of the install step, to sequence dependent steps. |
+Types, defaults and descriptions: [Reference (generated)](#reference-generated).
 
 ## Tests
 
@@ -64,3 +46,60 @@ module "microk8s" {
 terraform init -backend=false && terraform test   # plan-mode, no side effects
 bash scripts/tests/run.sh                         # script behaviour with stubbed snap/microk8s/sudo
 ```
+
+## Reference (generated)
+
+Generated from the module code by [terraform-docs](https://terraform-docs.io/)
+(configuration: `.terraform-docs.yml` at the repository root). Do not edit
+between the markers: change the code, then run
+`pre-commit run terraform-docs --all-files`.
+
+<!-- BEGIN_TF_DOCS -->
+### Requirements
+
+| Name | Version |
+| ---- | ------- |
+| terraform | >= 1.9.0, < 2.0.0 |
+
+### Providers
+
+| Name | Version |
+| ---- | ------- |
+| terraform | n/a |
+
+### Modules
+
+No modules.
+
+### Resources
+
+| Name | Type |
+| ---- | ---- |
+| [terraform_data.addon](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.channel](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.install](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.kubeconfig](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.ready](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| addons | MicroK8s add-ons to enable (name => { args }). args are passed verbatim after the add-on name, e.g. registry = { args = ["--size", "40Gi"] }. Removing an entry disables that add-on (volume data kept). Add-ons not listed here are left untouched. Names and arguments are validated (no shell metacharacters). | ```map(object({ args = optional(list(string), []) }))``` | `{}` | no |
+| api\_server\_address | Address written in the exported kubeconfig. 127.0.0.1 (default) survives WSL IP changes and is part of the MicroK8s certificate SANs. | `string` | `"127.0.0.1"` | no |
+| channel | MicroK8s snap channel, i.e. Kubernetes minor version and risk level (e.g. "1.35/stable"). Changing it refreshes the snap in place (`snap refresh`), keeping cluster data. "-strict" tracks select strict confinement. | `string` | `"1.35/stable"` | no |
+| kubeconfig\_path | Where the admin kubeconfig is exported (`~` is expanded). Created with 0600 permissions; removed on destroy. Keep it outside Git repositories: it embeds the cluster admin certificate. | `string` | `"~/.kube/tp-local-microk8s.yaml"` | no |
+| uninstall\_on\_destroy | Remove the MicroK8s snap AND all cluster data on `terraform destroy`. False (default) keeps MicroK8s installed and only removes what Terraform added on top of it. | `bool` | `false` | no |
+| wait\_timeout\_seconds | Timeout of every readiness wait (MicroK8s services, node Ready, add-ons), 60-3600 seconds. | `number` | `600` | no |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| addons | Add-ons managed by the module (sorted). |
+| api\_server\_url | Kubernetes API server URL written in the kubeconfig. |
+| channel | MicroK8s snap channel tracked by the cluster. |
+| install\_id | ID of the install step (changes when MicroK8s is reinstalled); useful to sequence dependent steps. |
+| kubeconfig\_context | Context name inside the exported kubeconfig. |
+| kubeconfig\_path | Absolute path of the exported admin kubeconfig (known at plan time; the file exists after apply). |
+<!-- END_TF_DOCS -->

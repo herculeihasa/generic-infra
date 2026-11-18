@@ -1,0 +1,46 @@
+# terraform-docs configuration shared by every reusable Terraform module
+# (ci/scripts/terraform-docs.sh, pre-commit hook "terraform-docs").
+#
+# Only the block between the markers below is generated, inside each module
+# README.md; everything outside them (architecture, usage, examples,
+# operations) is written by hand and never touched by the tool.
+version: ">= 0.24.0, < 1.0.0"
+
+formatter: markdown table
+
+sections:
+  show:
+    - requirements
+    - providers
+    - modules
+    - resources
+    - inputs
+    - outputs
+
+output:
+  file: README.md
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  # Headings of the generated sections are H3 (under the README's
+  # "## Reference (generated)" heading); no HTML anchors or tags, so the
+  # output also passes markdownlint.
+  indent: 3
+  anchor: false
+  html: false
+  escape: true
+  default: true
+  type: true
+  required: true
+  sensitive: true
+  hide-empty: false
+  lockfile: false
+  read-comments: true

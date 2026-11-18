@@ -125,6 +125,22 @@ repos:
         stages: [manual]
 
   # ---------------------------------------------------------------------------
+  # Documentation: generated Terraform module reference (commit). Rewrites only
+  # the <!-- BEGIN_TF_DOCS --> ... <!-- END_TF_DOCS --> block of each module
+  # README (.terraform-docs.yml); re-stage the README when it changes. Cheap
+  # and deterministic, so it runs at commit time; CI fails on a stale block.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: terraform-docs
+        name: terraform-docs (module README reference, re-stage the changes)
+        entry: ci/scripts/terraform-docs.sh
+        language: golang
+        additional_dependencies: [github.com/terraform-docs/terraform-docs@v0.24.0]
+        files: ^[^/]+/modules/[^/]+/(.+\.tf|README\.md)$|^\.terraform-docs\.yml$
+        require_serial: true
+
+  # ---------------------------------------------------------------------------
   # Misconfiguration scanners (manual; CI runs them on every change). Same
   # configuration as CI: <project>/.trivyignore.yaml, <project>/.checkov.yaml,
   # ci/policies/checkov, and /.checkov.yaml for the workflows.

@@ -31,6 +31,7 @@ storage that holds the Terraform remote state of every environment.
 9. [Deletion protection](#deletion-protection)
 10. [Requirements, files and tests](#requirements-files-and-tests)
 11. [Troubleshooting](#troubleshooting)
+12. [Reference (generated)](#reference-generated)
 
 ## Architecture
 
@@ -174,78 +175,30 @@ so that any data-plane call the provider makes uses Entra ID.
 
 ## Inputs
 
-Only `name`, `resource_group_name` and `location` are required.
+Only `name`, `resource_group_name` and `location` are required. Inputs by
+concern:
 
-**General**
+| Concern | Inputs |
+|---|---|
+| General | `name`, `resource_group_name`, `location`, `tags` |
+| Account | `account_kind`, `account_tier`, `account_replication_type`, `access_tier` |
+| Authentication and data security | `shared_access_key_enabled`, `blob_public_access_enabled`, `infrastructure_encryption_enabled`, `allowed_copy_scope` |
+| Network access | `public_network_access`, `network_rules` |
+| Blob data protection | `blob_properties` |
+| Containers, access control, protection | `containers`, `role_assignments`, `delete_lock_enabled`, `delete_lock_notes` |
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `name` | `string` | required | Globally unique account name, 3-24 lowercase letters/digits. Forces a new account. |
-| `resource_group_name` | `string` | required | Existing resource group (1-90 characters, no trailing period). |
-| `location` | `string` | required | Region, short form (`francecentral`). |
-| `tags` | `map(string)` | `{}` | Tags of the account. The module adds `managed_by = "terraform"` and `module = "storage_account"`. |
-
-**Account**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `account_kind` | `string` | `"StorageV2"` | `StorageV2` or `BlockBlobStorage`. Forces a new account. |
-| `account_tier` | `string` | `"Standard"` | Must match the kind: `Standard` with `StorageV2`, `Premium` with `BlockBlobStorage`. Forces a new account. |
-| `account_replication_type` | `string` | `"ZRS"` | `LRS`, `ZRS`, `GRS`, `RAGRS`, `GZRS`, `RAGZRS`. Premium: `LRS` or `ZRS` only. ZRS/GZRS need a region with availability zones. |
-| `access_tier` | `string` | `"Hot"` | `Hot`, `Cool` or `Cold`. Not sent for Premium accounts. |
-
-**Authentication and data security**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `shared_access_key_enabled` | `bool` | `false` | Allow Shared Key authorization (account keys, key-based SAS). |
-| `blob_public_access_enabled` | `bool` | `false` | Allow containers with anonymous access (`allow_nested_items_to_be_public`). |
-| `infrastructure_encryption_enabled` | `bool` | `true` | Double encryption. Forces a new account. |
-| `allowed_copy_scope` | `string` | `"AAD"` | `AAD` (same tenant), `PrivateLink`, or `null` (any source). |
-
-**Network access**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `public_network_access` | `string` | `"Disabled"` | `Disabled` (private endpoints only), `Enabled` (filtered by `network_rules`), `SecuredByPerimeter`. |
-| `network_rules` | `object` | `{}` | `default_action` (`"Deny"`), `bypass` (`["AzureServices"]`; `Logging`, `Metrics`, or `None` alone), `ip_rules` (`[]`; public IPv4 addresses or CIDRs up to `/30`), `virtual_network_subnet_ids` (`[]`; service-endpoint subnets). |
-
-**Blob data protection**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `blob_properties` | `object` | `{}` | `versioning_enabled` (`true`), `delete_retention_days` (`30`), `container_delete_retention_days` (`30`). Days: 1-365, `0` disables that soft delete policy. |
-
-**Containers, access control, protection**
-
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `containers` | `map(object)` | `{}` | Keyed by a stable identifier: `name` (defaults to the key), `access_type` (`"private"`, `"blob"`, `"container"`), `metadata` (`{}`). See [Blob containers](#blob-containers). |
-| `role_assignments` | `map(object)` | `{}` | Keyed by a stable identifier: `principal_id` (object ID), `role_definition_name`, `container_key` (`null` = account scope), `description`. |
-| `delete_lock_enabled` | `bool` | `false` | `CanNotDelete` management lock on the account. |
-| `delete_lock_notes` | `string` | generic text | Notes stored on the lock (max 512 characters). |
-
+Types, defaults and full descriptions: [Reference (generated)](#reference-generated).
 Every input is validated at plan time (names, enumerations, kind/tier and
 tier/replication combinations, IP and subnet formats, container names and
 metadata, role assignment principals and container keys).
 
 ## Outputs
 
-No output exposes an access key, SAS token or connection string.
-
-| Name | Description |
-|---|---|
-| `id` | Account resource ID (scope for role assignments, private endpoints). |
-| `name`, `resource_group_name`, `location` | Account placement. |
-| `primary_location`, `secondary_location` | Regions reported by Azure (secondary only for geo-redundant accounts). |
-| `account_kind`, `account_tier`, `account_replication_type`, `access_tier` | Account settings. |
-| `primary_blob_endpoint`, `primary_blob_host`, `secondary_blob_endpoint` | Blob endpoints (secondary only for RA-GRS/RA-GZRS). |
-| `security_configuration` | Effective security settings: Shared Key, OAuth default, HTTPS, TLS, anonymous access, double encryption, cross-tenant replication, copy scope, public network access, firewall default action and IP rules. |
-| `data_protection` | Versioning and soft delete retention days (`0` = disabled). |
-| `containers` | Map of container key => `name`, `id` (Resource Manager ID, scope for role assignments), `access_type`. |
-| `container_names` | Sorted list of container names. |
-| `role_assignments` | Map of role assignment key => `id`, `scope`, `principal_id`, `role_definition_name`. |
-| `management_lock_id` | Lock ID, `null` when there is no lock. |
+No output exposes an access key, SAS token or connection string. Besides the
+account identifiers and endpoints, `security_configuration` and
+`data_protection` report the effective settings (audits, tests), and
+`containers` / `role_assignments` give the IDs to use as RBAC scopes. Full
+list: [Reference (generated)](#reference-generated).
 
 ## Security configuration
 
@@ -339,10 +292,8 @@ registered (the bootstrap registers it through `resource_providers_to_register`)
 
 ## Requirements, files and tests
 
-| Name | Version |
-|---|---|
-| Terraform | `>= 1.9.0, < 2.0.0` (validated with 1.17.2 and 1.9.8) |
-| `hashicorp/azurerm` | `>= 5.14.0, < 6.0.0` (validated with 5.14.0) |
+Terraform `>= 1.9.0, < 2.0.0` (validated with 1.17.2 and 1.9.8) and
+`hashicorp/azurerm` `>= 5.14.0, < 6.0.0` (validated with 5.14.0).
 
 The module has no provider block and no lock file: configure `azurerm` and pin
 its version in the root module.
@@ -405,3 +356,86 @@ then `terraform plan` again to confirm there is no drift.
 | Azure rejects the network rules (e.g. `NetworkAclsValidationFailure`) | Private (RFC 1918) range in `ip_rules`, or a subnet without the `Microsoft.Storage` service endpoint | Public addresses only; enable the service endpoint on the subnet |
 | Replication type rejected at creation | ZRS/GZRS/RAGZRS in a region without availability zones | `account_replication_type = "LRS"` or `"GRS"` |
 | Blob service properties rejected (e.g. `FeatureNotSupportedForAccount`) | Versioning or soft delete unavailable for the account kind/region | Set `blob_properties` accordingly (`versioning_enabled = false`, `0` days) |
+
+## Reference (generated)
+
+Generated from the module code by [terraform-docs](https://terraform-docs.io/)
+(configuration: `.terraform-docs.yml` at the repository root). Do not edit
+between the markers: change the code, then run
+`pre-commit run terraform-docs --all-files`.
+
+<!-- BEGIN_TF_DOCS -->
+### Requirements
+
+| Name | Version |
+| ---- | ------- |
+| terraform | >= 1.9.0, < 2.0.0 |
+| azurerm | >= 5.14.0, < 6.0.0 |
+
+### Providers
+
+| Name | Version |
+| ---- | ------- |
+| azurerm | >= 5.14.0, < 6.0.0 |
+
+### Modules
+
+No modules.
+
+### Resources
+
+| Name | Type |
+| ---- | ---- |
+| [azurerm_management_lock.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/management_lock) | resource |
+| [azurerm_role_assignment.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
+| [azurerm_storage_account.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account) | resource |
+| [azurerm_storage_container.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_container) | resource |
+
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| location | Azure region of the storage account, in its short form (e.g. francecentral). | `string` | n/a | yes |
+| name | Globally unique name of the storage account (3-24 lowercase letters and digits). Forces a new account when changed. | `string` | n/a | yes |
+| resource\_group\_name | Existing resource group in which the storage account is created. The module never creates the resource group. | `string` | n/a | yes |
+| access\_tier | Default access tier of blobs in a Standard account: Hot (frequent access), Cool (30+ days) or Cold (90+ days). Ignored for Premium (BlockBlobStorage) accounts, which have no access tier. | `string` | `"Hot"` | no |
+| account\_kind | Account kind: StorageV2 (general-purpose v2, Standard performance) or BlockBlobStorage (Premium block blobs, low latency). Forces a new account when changed. | `string` | `"StorageV2"` | no |
+| account\_replication\_type | Redundancy: LRS (one datacenter), ZRS (three zones, survives a zone outage), GRS/RAGRS (LRS + secondary region), GZRS/RAGZRS (ZRS + secondary region). Premium accounts support LRS and ZRS only. ZRS/GZRS require a region with availability zones. | `string` | `"ZRS"` | no |
+| account\_tier | Performance tier. Must match account\_kind: Standard for StorageV2, Premium for BlockBlobStorage. Forces a new account when changed. | `string` | `"Standard"` | no |
+| allowed\_copy\_scope | Restrict copy operations (Copy Blob, AzCopy) to sources in the same Microsoft Entra tenant ("AAD") or reachable through private links to the same virtual network ("PrivateLink"). Null allows any source. | `string` | `"AAD"` | no |
+| blob\_properties | Blob service data protection: - versioning\_enabled: keep every previous version of a blob when it is overwritten or deleted (default true). - delete\_retention\_days: soft delete of blobs and versions, 1-365 days; 0 disables it (default 30). - container\_delete\_retention\_days: soft delete of containers, 1-365 days; 0 disables it (default 30). | ```object({ versioning_enabled = optional(bool, true) delete_retention_days = optional(number, 30) container_delete_retention_days = optional(number, 30) })``` | `{}` | no |
+| blob\_public\_access\_enabled | Allow containers to be configured for anonymous public read access (allow\_nested\_items\_to\_be\_public). Default false; required only if a container uses access\_type "blob" or "container". | `bool` | `false` | no |
+| containers | Blob containers, keyed by a stable identifier (used in resource addresses and in role\_assignments[*].container\_key, so renaming a key recreates the container): - name: container name, 3-63 characters (lowercase letters, digits, single hyphens); defaults to the key. - access\_type: private (default, Entra ID-authorized access only), blob (anonymous read of blobs) or container (anonymous read and list). Anything but private requires blob\_public\_access\_enabled = true. - metadata: name/value pairs; names must be lowercase identifiers (letters, digits, underscores, not starting with a digit). | ```map(object({ name = optional(string) access_type = optional(string, "private") metadata = optional(map(string), {}) }))``` | `{}` | no |
+| delete\_lock\_enabled | Place a CanNotDelete management lock on the storage account, in addition to the module's prevent\_destroy. Needs Microsoft.Authorization/locks/* (Owner or User Access Administrator). While it exists, deleting the account or one of its containers through Azure Resource Manager fails; blob data-plane operations are not affected. | `bool` | `false` | no |
+| delete\_lock\_notes | Notes stored on the management lock (why it exists, how to remove it). | `string` | `"Protects the storage account and its containers from deletion. Remove deliberately (delete_lock_enabled = false) before any decommissioning."` | no |
+| infrastructure\_encryption\_enabled | Add a second, infrastructure-level encryption layer (double encryption) on top of the always-on service encryption. Forces a new account when changed. | `bool` | `true` | no |
+| network\_rules | Firewall of the public endpoint (effective when public\_network\_access = "Enabled"): - default\_action: Deny (default, only the listed sources are allowed) or Allow. - bypass: trusted traffic allowed regardless of the rules: AzureServices, Logging, Metrics, or None alone. - ip\_rules: public IPv4 addresses or CIDR ranges (prefix /30 at most; Azure rejects /31 and /32, use the bare address; private ranges are not accepted by Azure). - virtual\_network\_subnet\_ids: subnets allowed through a Microsoft.Storage service endpoint. | ```object({ default_action = optional(string, "Deny") bypass = optional(set(string), ["AzureServices"]) ip_rules = optional(list(string), []) virtual_network_subnet_ids = optional(list(string), []) })``` | `{}` | no |
+| public\_network\_access | Public endpoint exposure: Disabled (default, private endpoints only: clients, CI runners and Terraform itself need private connectivity for data-plane access), Enabled (public endpoint filtered by network\_rules) or SecuredByPerimeter (governed by a Network Security Perimeter). | `string` | `"Disabled"` | no |
+| role\_assignments | Azure RBAC role assignments, keyed by a stable identifier. With Shared Key disabled, data-plane access requires a data role such as "Storage Blob Data Contributor" (read/write, e.g. Terraform state) or "Storage Blob Data Reader". - principal\_id: object ID of the user, group, service principal or managed identity. - role\_definition\_name: built-in or custom role name. - container\_key: key in var.containers to scope the assignment to that container only (least privilege); null scopes it to the whole account. - description: optional free text stored on the assignment. | ```map(object({ principal_id = string role_definition_name = string container_key = optional(string) description = optional(string) }))``` | `{}` | no |
+| shared\_access\_key\_enabled | Allow Shared Key authorization (account keys, key-based SAS, connection strings). Default false: every data-plane request must use Microsoft Entra ID (Azure RBAC data roles). Callers then need `storage_use_azuread = true` in their azurerm provider and `use_azuread_auth = true` in an azurerm backend. | `bool` | `false` | no |
+| tags | Tags applied to the storage account. The module adds managed\_by and module. | `map(string)` | `{}` | no |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| access\_tier | Default blob access tier (Hot, Cool or Cold; reported by Azure for Premium accounts). |
+| account\_kind | Account kind (StorageV2 or BlockBlobStorage). |
+| account\_replication\_type | Redundancy of the account (LRS, ZRS, GRS, RAGRS, GZRS, RAGZRS). |
+| account\_tier | Performance tier (Standard or Premium). |
+| container\_names | Sorted list of the container names. |
+| containers | Map of container key => name, resource ID (Azure Resource Manager ID, scope for container-level role assignments) and access type. |
+| data\_protection | Blob versioning and soft delete retention (0 = soft delete disabled). |
+| id | Resource ID of the storage account (scope for Azure RBAC role assignments). |
+| location | Azure region of the storage account, as configured. |
+| management\_lock\_id | ID of the CanNotDelete management lock, null when delete\_lock\_enabled = false. |
+| name | Name of the storage account. |
+| primary\_blob\_endpoint | Primary blob service endpoint (https://<name>.blob.core.windows.net/). |
+| primary\_blob\_host | Primary blob service host name, e.g. for firewall or private DNS rules. |
+| primary\_location | Primary region reported by Azure. |
+| resource\_group\_name | Resource group of the storage account. |
+| role\_assignments | Map of role assignment key => ID, scope, principal and role. |
+| secondary\_blob\_endpoint | Secondary blob endpoint for RAGRS/RAGZRS accounts (read access), empty otherwise. |
+| secondary\_location | Secondary (paired) region for GRS/RAGRS/GZRS/RAGZRS accounts, empty otherwise. |
+| security\_configuration | Effective security settings of the account. |
+<!-- END_TF_DOCS -->

@@ -32,7 +32,7 @@ variable "api_server_address" {
 }
 
 variable "wait_timeout_seconds" {
-  description = "Timeout of every readiness wait (MicroK8s services, node Ready, add-ons)."
+  description = "Timeout of every readiness wait (MicroK8s services, node Ready, add-ons), 60-3600 seconds."
   type        = number
   default     = 600
 
@@ -43,7 +43,7 @@ variable "wait_timeout_seconds" {
 }
 
 variable "addons" {
-  description = "MicroK8s add-ons to enable (name => { args }). args are passed verbatim after the add-on name, e.g. registry = { args = [\"--size\", \"40Gi\"] }. Removing an entry disables that add-on (volume data kept). Add-ons not listed here are left untouched."
+  description = "MicroK8s add-ons to enable (name => { args }). args are passed verbatim after the add-on name, e.g. registry = { args = [\"--size\", \"40Gi\"] }. Removing an entry disables that add-on (volume data kept). Add-ons not listed here are left untouched. Names and arguments are validated (no shell metacharacters)."
   type = map(object({
     args = optional(list(string), [])
   }))
