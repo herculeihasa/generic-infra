@@ -48,9 +48,9 @@ environment on a Windows workstation.
 | 03 | [MicroK8s operations](03-microk8s-operations.md) | Readiness, services, nodes, pods, logs, add-ons, start/stop |
 | 04 | [Terraform operations](04-terraform-operations.md) | Both stages: init, plan, apply, outputs, state, destroy, ordering |
 | 05 | [Kubernetes and Helm](05-kubernetes-and-helm.md) | Namespaces, RBAC, resources, Helm releases, health |
-| 06 | CI/CD and local deployment (in progress) | Hosted vs self-hosted runner, WSL runner, approvals |
-| 07 | Troubleshooting and recovery (in progress) | Diagnosis by symptom, cluster/state recovery, rebuild |
-| 08 | Maintenance and lifecycle (in progress) | Upgrades, backups, reset, full recreation |
+| 06 | [CI/CD and local deployment](06-cicd-and-deployment.md) | Hosted vs self-hosted runner, WSL runner, approvals |
+| 07 | [Troubleshooting and recovery](07-troubleshooting-and-recovery.md) | Diagnosis by symptom, cluster/state recovery, rebuild |
+| 08 | [Maintenance and lifecycle](08-maintenance-and-lifecycle.md) | Upgrades, backups, reset, full recreation |
 
 ## Environment reference
 
@@ -91,3 +91,11 @@ Values come from the code (defaults of `bootstrap/variables.tf`,
 | Grant permissions to a service account | [05 K8S-03](05-kubernetes-and-helm.md#k8s-03-manage-rbac) |
 | Install, upgrade or roll back a Helm release | [05 K8S-06..08](05-kubernetes-and-helm.md#k8s-06-install-a-release) |
 | Check an application's health | [05 K8S-10](05-kubernetes-and-helm.md#k8s-10-check-deployment-health) |
+| Set up the self-hosted WSL runner | [06 CD-03 / CD-04](06-cicd-and-deployment.md#cd-03-register-the-self-hosted-wsl-runner) |
+| Deploy through the pipeline and approve | [06 CD-05 / CD-06](06-cicd-and-deployment.md#cd-05-run-a-local-deployment) |
+| Something is broken: where to start | [07 §1 and T-00](07-troubleshooting-and-recovery.md#1-diagnose-layer-by-layer) |
+| Cannot reach the cluster | [07 R-02](07-troubleshooting-and-recovery.md#r-02-regain-cluster-access) |
+| State lost or corrupted | [07 R-03..R-05](07-troubleshooting-and-recovery.md#r-03-restore-a-terraform-state-from-its-backup) |
+| Reinstall the cluster from scratch | [07 R-06](07-troubleshooting-and-recovery.md#r-06-recreate-the-cluster-reinstall-microk8s) |
+| Upgrade MicroK8s / Terraform / providers | [08 MNT-01 / MNT-03 / MNT-04](08-maintenance-and-lifecycle.md#mnt-01-upgrade-microk8s-kubernetes-minor-version) |
+| Back up and restore | [08 MNT-07 / MNT-08](08-maintenance-and-lifecycle.md#mnt-07-back-up-the-environment) |
