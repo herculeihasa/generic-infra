@@ -3,7 +3,7 @@
 # them locally is still caught. This is where outdated generated
 # documentation (terraform-docs) and Markdown lint fail the pipeline.
 #
-# Terraform validation, TFLint, tests and security scans are NOT repeated
+# Terraform validation, TFLint, policy checks and security scans are NOT repeated
 # here: the per-project pipelines run them (_terraform-quality.yml).
 #
 # Conventions enforced by `ci/scripts/check-repo.py workflows`: actions pinned by commit

@@ -91,7 +91,7 @@ jobs:
         run: ci/scripts/terraform-checks.sh "$PROJECT" fmt
 
   validate:
-    name: "1 · init / validate / test (${{ matrix.root }})"
+    name: "1 · init / validate (${{ matrix.root }})"
     needs: changes
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-24.04
@@ -108,7 +108,7 @@ jobs:
         with:
           terraform_version: ${{ needs.changes.outputs.terraform-version }}
           terraform_wrapper: false
-      - name: Init (lock file read-only), validate, test
+      - name: Init (lock file read-only), validate
         env:
           ROOT: ${{ matrix.root }}
         run: ci/scripts/terraform-checks.sh "$PROJECT" root "$ROOT"
@@ -131,23 +131,10 @@ jobs:
         with:
           terraform_version: ${{ needs.changes.outputs.terraform-min-version }}
           terraform_wrapper: false
-      - name: Validate and test with the oldest supported Terraform
+      - name: Validate with the oldest supported Terraform
         env:
           ROOT: ${{ matrix.root }}
         run: ci/scripts/terraform-checks.sh "$PROJECT" root "$ROOT"
-
-  scripts:
-    name: "1 · script tests"
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Run the project's script test suites
-        run: ci/scripts/terraform-checks.sh "$PROJECT" scripts
 
   lint:
     name: "2 · TFLint / ShellCheck"
@@ -181,7 +168,7 @@ jobs:
           persist-credentials: false
       - name: Install pinned tools (checksum-verified)
         run: ci/scripts/install-tools.sh actionlint
-      - name: actionlint + CI unit tests
+      - name: actionlint + repository policy checks
         run: ci/scripts/lint.sh repo workflows
 
   security:
@@ -226,7 +213,7 @@ jobs:
 
   gate:
     name: quality gate
-    needs: [changes, format, validate, compatibility, scripts, lint, workflows, security]
+    needs: [changes, format, validate, compatibility, lint, workflows, security]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

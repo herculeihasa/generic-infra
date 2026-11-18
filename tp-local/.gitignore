@@ -57,9 +57,6 @@ microk8s*.yaml
 .envrc
 .tflint.d/
 
-# Test scratch directories created by the script test suite.
-**/scripts/tests/.work/
-
 # -----------------------------------------------------------------------------
 # Editors / OS
 # -----------------------------------------------------------------------------

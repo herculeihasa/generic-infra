@@ -7,7 +7,6 @@
 *.sh         text eol=lf
 *.tf         text eol=lf
 *.tfvars     text eol=lf
-*.tftest.hcl text eol=lf
 *.hcl        text eol=lf
 *.yaml       text eol=lf
 *.yml        text eol=lf

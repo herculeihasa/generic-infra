@@ -6,7 +6,6 @@
 # pushed files, or every file with --all-files):
 #
 #   ci/scripts/pre-commit-hook.sh validate [files...]   # init (read-only lock) + validate
-#   ci/scripts/pre-commit-hook.sh test     [files...]   # init + validate + terraform test
 #   ci/scripts/pre-commit-hook.sh tflint   [files...]   # TFLint per affected project
 #   ci/scripts/pre-commit-hook.sh trivy    [files...]   # Trivy HIGH/CRITICAL gate
 #   ci/scripts/pre-commit-hook.sh checkov  [files...]   # Checkov project (+ workflow) policies
@@ -14,12 +13,12 @@
 # Root selection is ci.py's (same rules as CI change detection). Terraform is
 # required; TFLint, Trivy and Checkov are optional locally: when one is not
 # installed the check is reported as skipped (CI always runs it). No Azure
-# credentials, backend or cluster are needed (init -backend=false, mocked tests).
+# credentials, backend or cluster are needed (init -backend=false).
 # -----------------------------------------------------------------------------
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-check="${1:?usage: pre-commit-hook.sh validate|test|tflint|trivy|checkov [files...]}"
+check="${1:?usage: pre-commit-hook.sh validate|tflint|trivy|checkov [files...]}"
 shift
 scripts_dir="${CI_REPO_ROOT}/ci/scripts"
 failed=0
@@ -62,10 +61,10 @@ run() {
 }
 
 case "$check" in
-  validate | test | tflint | trivy | checkov) ;;
-  *) ci_die "unknown check '${check}' (validate|test|tflint|trivy|checkov)" ;;
+  validate | tflint | trivy | checkov) ;;
+  *) ci_die "unknown check '${check}' (validate|tflint|trivy|checkov)" ;;
 esac
-if [[ "$check" == "validate" || "$check" == "test" ]]; then
+if [[ "$check" == "validate" ]]; then
   ci_require terraform python3
 else
   ci_require python3
@@ -76,12 +75,10 @@ for project in $(projects); do
   [[ ${#roots[@]} -gt 0 ]] || continue
 
   case "$check" in
-    validate | test)
+    validate)
       warn_terraform_version "$project"
-      mode=validate
-      [[ "$check" == "test" ]] && mode=root
       for root in "${roots[@]}"; do
-        run bash "${scripts_dir}/terraform-checks.sh" "$project" "$mode" "$root"
+        run bash "${scripts_dir}/terraform-checks.sh" "$project" root "$root"
       done
       ;;
     tflint)

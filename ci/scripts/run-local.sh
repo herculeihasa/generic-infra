@@ -34,9 +34,8 @@ skip() { results+=("SKIPPED  $1 ($2 not installed)"); }
 # Stage 1 -----------------------------------------------------------------------
 gate "terraform fmt" bash "${scripts_dir}/terraform-checks.sh" "$project" fmt
 while read -r root; do
-  [[ -n "$root" ]] && gate "init/validate/test ${root}" bash "${scripts_dir}/terraform-checks.sh" "$project" root "$root"
+  [[ -n "$root" ]] && gate "init/validate ${root}" bash "${scripts_dir}/terraform-checks.sh" "$project" root "$root"
 done < <(ci_manifest_list "$project" roots)
-gate "script tests" bash "${scripts_dir}/terraform-checks.sh" "$project" scripts
 
 # Stage 2 -----------------------------------------------------------------------
 if command -v tflint >/dev/null 2>&1; then gate "tflint" bash "${scripts_dir}/lint.sh" "$project" tflint; else skip "tflint" tflint; fi

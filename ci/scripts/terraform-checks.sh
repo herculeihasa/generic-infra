@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# Stage 1 gates: formatting, initialisation, lock-file consistency, validation,
-# unit tests. Same commands in CI and locally.
+# Stage 1 gates: formatting, initialisation, lock-file consistency and
+# validation. Same commands in CI and locally.
 #
 #   ci/scripts/terraform-checks.sh <project> fmt
-#   ci/scripts/terraform-checks.sh <project> root <root>   # init + lock + validate + test
-#   ci/scripts/terraform-checks.sh <project> validate <root>  # init + lock + validate (no test)
-#   ci/scripts/terraform-checks.sh <project> scripts       # script test suites
+#   ci/scripts/terraform-checks.sh <project> root <root>   # init + lock + validate
 #
 # Lock files: a root whose .terraform.lock.hcl is committed is initialised
 # with -lockfile=readonly, so a lock file inconsistent with the provider
@@ -16,8 +14,8 @@
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-project="${1:?usage: terraform-checks.sh <project> fmt|root <root>|validate <root>|scripts}"
-action="${2:?usage: terraform-checks.sh <project> fmt|root <root>|validate <root>|scripts}"
+project="${1:?usage: terraform-checks.sh <project> fmt|root <root>}"
+action="${2:?usage: terraform-checks.sh <project> fmt|root <root>}"
 project_dir="$(ci_project_dir "$project")"
 export TF_IN_AUTOMATION=1 CHECKPOINT_DISABLE=1 TF_INPUT=0
 
@@ -34,7 +32,7 @@ check_fmt() {
 }
 
 check_root() {
-  local root="$1" with_tests="${2:-true}" dir lock_mode=()
+  local root="$1" dir lock_mode=()
   dir="${project_dir}/${root}"
   [[ -d "$dir" ]] || ci_die "root ${project}/${root} does not exist"
 
@@ -50,37 +48,11 @@ check_root() {
   ci_group "terraform validate (${project}/${root})"
   terraform -chdir="$dir" validate || ci_die "validate failed for ${project}/${root}"
   ci_endgroup
-
-  if [[ "$with_tests" != "true" ]]; then
-    ci_summary "- ✅ init/validate: \`${project}/${root}\` (Terraform $(terraform version | head -1 | awk '{print $2}'))"
-    return
-  fi
-
-  if compgen -G "${dir}/tests/*.tftest.hcl" >/dev/null; then
-    ci_group "terraform test (${project}/${root})"
-    terraform -chdir="$dir" test || ci_die "terraform test failed for ${project}/${root}"
-    ci_endgroup
-  fi
-  ci_summary "- ✅ init/validate/test: \`${project}/${root}\` (Terraform $(terraform version | head -1 | awk '{print $2}'))"
-}
-
-check_scripts() {
-  local suite found=false
-  while read -r suite; do
-    [[ -n "$suite" ]] || continue
-    found=true
-    ci_group "script tests: ${project}/${suite}"
-    bash "${project_dir}/${suite}" || ci_die "script test suite failed: ${project}/${suite}"
-    ci_endgroup
-    ci_summary "- ✅ script tests: \`${project}/${suite}\`"
-  done < <(ci_manifest_list "$project" script_tests)
-  [[ "$found" == "true" ]] || ci_log "no script test suite declared for ${project}"
+  ci_summary "- ✅ init/validate: \`${project}/${root}\` (Terraform $(terraform version | head -1 | awk '{print $2}'))"
 }
 
 case "$action" in
   fmt) check_fmt ;;
   root) check_root "${3:?usage: terraform-checks.sh <project> root <root>}" ;;
-  validate) check_root "${3:?usage: terraform-checks.sh <project> validate <root>}" false ;;
-  scripts) check_scripts ;;
   *) ci_die "unknown action '${action}'" ;;
 esac

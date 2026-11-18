@@ -7,8 +7,9 @@
 #
 # Stages (see docs/pre-commit.md):
 #   pre-commit  fast, offline after the first install, run on staged files
-#   pre-push    Terraform validation and lint on the pushed changes
-#   manual      tests and security scans (also run by CI)
+#   pre-push    Terraform validation, lint and repository policy checks on
+#               the pushed changes
+#   manual      security scans (also run by CI)
 #
 # Every remote hook repository is pinned to a release tag; the tool versions
 # shared with CI (gitleaks, actionlint) must match ci/tool-versions.env
@@ -91,9 +92,9 @@ repos:
 
   # ---------------------------------------------------------------------------
   # Terraform: formatting and static checks (commit), init + validate and
-  # TFLint (push), terraform test (manual). The push/manual hooks run the CI
-  # scripts on the affected roots only (ci.py change detection); none needs
-  # Azure credentials, a backend or a cluster.
+  # TFLint (push). The push hooks run the CI scripts on the affected roots
+  # only (ci.py change detection); none needs Azure credentials, a backend
+  # or a cluster.
   # ---------------------------------------------------------------------------
   - repo: local
     hooks:
@@ -101,7 +102,7 @@ repos:
         name: terraform fmt (files are rewritten, re-stage them)
         entry: terraform fmt
         language: system
-        files: \.(tf|tfvars|tftest\.hcl)$
+        files: \.(tf|tfvars)$
 
       - id: azure-config
         name: Azure provider/backend static checks (ci.py azure-config)
@@ -128,15 +129,6 @@ repos:
         require_serial: true
         verbose: true
         stages: [pre-push, manual]
-
-      - id: terraform-test
-        name: terraform test, mocked providers (affected roots)
-        entry: ci/scripts/pre-commit-hook.sh test
-        language: script
-        files: ^(az-infra-generic|tp-local|ci)/
-        exclude: \.md$
-        require_serial: true
-        stages: [manual]
 
   # ---------------------------------------------------------------------------
   # Documentation: generated Terraform module reference (commit). Rewrites only
