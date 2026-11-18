@@ -28,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       local-deploy:
-        description: Run the local stages on the self-hosted WSL runner (plan, approval, apply, integration tests)
+        description: Run the local stages on the self-hosted WSL runner (plan, approval, apply, post-deployment verification)
         type: boolean
         default: false
       allow-destroy:
@@ -106,8 +106,8 @@ jobs:
   # ---------------------------------------------------------------------------
   # Self-hosted WSL runner: stage 1 (MicroK8s) then stage 2 (Kubernetes/Helm),
   # each planned, approved (environment tp-local) and applied from its saved
-  # plan, then integration tests. Same guard on every job: manual dispatch
-  # from main with the runner enabled.
+  # plan, then the post-deployment verification. Same guard on every job:
+  # manual dispatch from main with the runner enabled.
   # ---------------------------------------------------------------------------
   local-plan-bootstrap:
     name: local plan bootstrap
@@ -171,8 +171,8 @@ jobs:
       artifact: ${{ needs.local-plan-dev.outputs.artifact }}
       allow-destroy: ${{ inputs.allow-destroy == true }}
 
-  local-integration:
-    name: "5 · local integration tests (self-hosted)"
+  local-verification:
+    name: "5 · post-deployment verification (self-hosted)"
     needs: [local-readiness, local-plan-dev, local-apply-dev]
     if: >-
       always()
