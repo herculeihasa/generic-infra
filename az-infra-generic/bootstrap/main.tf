@@ -3,14 +3,18 @@
 #
 # Creates the Azure Blob Storage that every other Terraform configuration of
 # this project uses as its "azurerm" backend:
-#   - one resource group and one hardened StorageV2 account,
-#   - one private blob container per environment (tfstate-<env>) plus one
-#     (tfstate-bootstrap) that can receive this configuration's own state,
+#   - one resource group (owned here),
+#   - one hardened StorageV2 account through the reusable storage_account
+#     module (../modules/storage_account), with one private blob container
+#     per environment (tfstate-<env>) plus one (tfstate-bootstrap) that can
+#     receive this configuration's own state,
 #   - Entra ID data-plane role assignments (no access keys, no SAS),
-#   - deletion protection (prevent_destroy + optional CanNotDelete lock).
+#   - deletion protection (prevent_destroy in the module + optional
+#     CanNotDelete lock).
 #
 # This configuration runs with LOCAL state because the backend does not exist
-# yet. See README "Backend storage bootstrap procedure".
+# yet. See README "Backend storage bootstrap procedure". Existing states that
+# predate the module are migrated by moved.tf.
 # =============================================================================
 
 data "azurerm_client_config" "current" {}
@@ -58,6 +62,30 @@ locals {
     ]) : "${pair.container}/${pair.principal_id}" => pair
   }
 
+  # Role assignment keys are part of the resource addresses: "current-principal"
+  # and "<environment>/<principal_id>" (an environment name never contains "/",
+  # so the two families cannot collide). Do not rename them.
+  role_assignments = merge(
+    {
+      for key, enabled in { "current-principal" = var.grant_current_principal_access } : key => {
+        # Lets the operator who runs the bootstrap use the backend immediately.
+        principal_id         = data.azurerm_client_config.current.object_id
+        role_definition_name = "Storage Blob Data Contributor"
+        container_key        = null
+        description          = "Terraform state access for the identity that ran the bootstrap."
+      } if enabled
+    },
+    {
+      # Least privilege for CI/CD identities: access to ONE environment's container.
+      for key, pair in local.state_contributor_assignments : key => {
+        principal_id         = pair.principal_id
+        role_definition_name = "Storage Blob Data Contributor"
+        container_key        = pair.container
+        description          = "Terraform state access to tfstate-${pair.container} only."
+      }
+    },
+  )
+
   tags = merge(var.tags, {
     project    = var.project
     purpose    = "terraform-remote-state"
@@ -72,103 +100,58 @@ resource "azurerm_resource_group" "tfstate" {
   tags     = local.tags
 }
 
-resource "azurerm_storage_account" "tfstate" {
+module "state_storage" {
+  source = "../modules/storage_account"
+
+  # --- Placement: the resource group dependency is implicit through these
+  # references, so the group always exists before the account. -----------------
   name                = local.storage_account_name
   resource_group_name = azurerm_resource_group.tfstate.name
   location            = azurerm_resource_group.tfstate.location
   tags                = local.tags
 
+  # --- Account ------------------------------------------------------------------
   account_kind             = "StorageV2"
   account_tier             = "Standard"
   account_replication_type = var.account_replication_type
   access_tier              = "Hot"
 
-  # --- Authentication: Microsoft Entra ID only --------------------------------
-  shared_access_key_enabled       = false # no account keys, no key-based SAS
-  default_to_oauth_authentication = true  # portal uses Entra ID too
-  local_user_enabled              = false # no SFTP/local users
-  sftp_enabled                    = false
-
-  # --- Transport and exposure ---------------------------------------------------
-  https_traffic_only_enabled       = true
-  min_tls_version                  = "TLS1_2"
-  allow_nested_items_to_be_public  = false
-  cross_tenant_replication_enabled = false
-  allowed_copy_scope               = "AAD"
-  public_network_access            = var.public_network_access
-
-  # --- Encryption at rest -------------------------------------------------------
-  # Azure Storage always encrypts at rest (AES-256, Microsoft-managed keys).
-  # Infrastructure encryption adds a second, independent encryption layer.
+  # --- Security: Microsoft Entra ID only, matching the backends' and the
+  # provider's use_azuread settings. ----------------------------------------------
+  shared_access_key_enabled         = false
+  blob_public_access_enabled        = false
   infrastructure_encryption_enabled = true
+  allowed_copy_scope                = "AAD"
 
-  # --- Consistency and recovery ---------------------------------------------------
-  # State locking relies on native blob leases (no extra resource needed).
-  # Versioning + soft delete allow recovering any previous state revision.
-  blob_properties {
-    versioning_enabled = true
-
-    delete_retention_policy {
-      days = var.blob_soft_delete_retention_days
-    }
-
-    container_delete_retention_policy {
-      days = var.container_soft_delete_retention_days
-    }
-  }
-
-  network_rules {
+  # --- Network: the public endpoint stays reachable (Entra ID still required)
+  # until runner/operator IPs or private endpoints are defined; listing IPs
+  # switches the firewall to Deny. ---------------------------------------------------
+  public_network_access = var.public_network_access
+  network_rules = {
     default_action = length(var.allowed_ip_ranges) > 0 ? "Deny" : "Allow"
     bypass         = ["AzureServices"]
     ip_rules       = var.allowed_ip_ranges
   }
 
-  lifecycle {
-    # Losing this account means losing every environment's state.
-    prevent_destroy = true
+  # --- Consistency and recovery --------------------------------------------------
+  # State locking relies on native blob leases (no extra resource needed).
+  # Versioning + soft delete allow recovering any previous state revision.
+  blob_properties = {
+    versioning_enabled              = true
+    delete_retention_days           = var.blob_soft_delete_retention_days
+    container_delete_retention_days = var.container_soft_delete_retention_days
   }
-}
 
-resource "azurerm_storage_container" "tfstate" {
-  for_each = local.state_containers
+  # Keys = environment names (stable addresses: moved.tf relies on them).
+  containers = {
+    for env in local.state_containers : env => {
+      name        = "tfstate-${env}"
+      access_type = "private"
+    }
+  }
 
-  name                  = "tfstate-${each.key}"
-  storage_account_id    = azurerm_storage_account.tfstate.id
-  container_access_type = "private"
-}
+  role_assignments = local.role_assignments
 
-# Lets the operator who runs the bootstrap use the backend immediately.
-resource "azurerm_role_assignment" "current_principal_state_access" {
-  count = var.grant_current_principal_access ? 1 : 0
-
-  scope                = azurerm_storage_account.tfstate.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = data.azurerm_client_config.current.object_id
-  description          = "Terraform state access for the identity that ran the bootstrap."
-}
-
-# Least privilege for CI/CD identities: access to ONE environment's container.
-resource "azurerm_role_assignment" "state_contributors" {
-  for_each = local.state_contributor_assignments
-
-  scope                = azurerm_storage_container.tfstate[each.value.container].id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = each.value.principal_id
-  description          = "Terraform state access to tfstate-${each.value.container} only."
-}
-
-resource "azurerm_management_lock" "tfstate" {
-  count = var.delete_lock_enabled ? 1 : 0
-
-  name       = "lock-${azurerm_storage_account.tfstate.name}-nodelete"
-  scope      = azurerm_storage_account.tfstate.id
-  lock_level = "CanNotDelete"
-  notes      = "Protects the Terraform remote state of every environment. Remove deliberately (delete_lock_enabled = false) before any decommissioning."
-
-  # Create the lock last so it never blocks the initial provisioning.
-  depends_on = [
-    azurerm_storage_container.tfstate,
-    azurerm_role_assignment.current_principal_state_access,
-    azurerm_role_assignment.state_contributors,
-  ]
+  delete_lock_enabled = var.delete_lock_enabled
+  delete_lock_notes   = "Protects the Terraform remote state of every environment. Remove deliberately (delete_lock_enabled = false) before any decommissioning."
 }

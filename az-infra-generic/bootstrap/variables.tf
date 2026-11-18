@@ -157,8 +157,11 @@ variable "allowed_ip_ranges" {
   default     = []
 
   validation {
-    condition     = alltrue([for ip in var.allowed_ip_ranges : can(cidrhost(strcontains(ip, "/") ? ip : "${ip}/32", 0))])
-    error_message = "allowed_ip_ranges must contain IPv4 addresses or CIDR ranges."
+    condition = alltrue([
+      for ip in var.allowed_ip_ranges :
+      can(cidrhost(strcontains(ip, "/") ? ip : "${ip}/32", 0)) && try(tonumber(split("/", ip)[1]), 0) <= 30
+    ])
+    error_message = "allowed_ip_ranges must contain IPv4 addresses or CIDR ranges with a prefix of /30 or shorter (Azure rejects /31 and /32: use the bare address)."
   }
 }
 

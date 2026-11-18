@@ -13,9 +13,11 @@ misconfigurations:
 
   # State storage network default action Allow: access is Entra ID only
   # (Shared Key disabled); allowed_ip_ranges / public_network_access restrict
-  # it once runner IPs or private endpoints exist.
+  # it once runner IPs or private endpoints exist. The account is declared in
+  # the storage_account module (whose own default is Deny + public access
+  # Disabled); the bootstrap passes Allow until IPs are known.
   - id: AVD-AZU-0012
     paths:
-      - "bootstrap/main.tf"
-    statement: "State account reachable publicly with Entra ID-only authentication until runner IPs / private endpoint are defined."
+      - "modules/storage_account/main.tf"
+    statement: "State account (bootstrap, via modules/storage_account) reachable publicly with Entra ID-only authentication until runner IPs / private endpoint are defined."
     expired_at: 2027-03-31

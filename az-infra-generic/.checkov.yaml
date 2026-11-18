@@ -33,6 +33,8 @@ skip-check:
   - CKV_AZURE_168
 
   # --- Terraform state storage account -------------------------------------
+  # bootstrap/ -> modules/storage_account (module defaults: public network
+  # access Disabled, firewall Deny; the bootstrap opens the public endpoint).
   # Customer-managed keys: infrastructure (double) encryption with
   # Microsoft-managed keys accepted for state; CMK can be added.
   - CKV2_AZURE_1

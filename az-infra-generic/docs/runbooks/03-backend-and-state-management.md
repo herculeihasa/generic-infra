@@ -406,7 +406,9 @@ unexpected change.
 
 1. Set `delete_lock_enabled = false` and apply (removes the lock).
 2. Remove the `lifecycle { prevent_destroy = true }` block of
-   `azurerm_storage_account.tfstate` in `bootstrap/main.tf`.
+   `azurerm_storage_account.this` in `modules/storage_account/main.tf`
+   (address `module.state_storage.azurerm_storage_account.this`), on a
+   dedicated branch: the module is shared by every caller.
 3. `terraform plan -destroy -out=destroy.tfplan`, review, `terraform apply destroy.tfplan`.
 
 The lock also blocks deleting state containers and may block removing role
