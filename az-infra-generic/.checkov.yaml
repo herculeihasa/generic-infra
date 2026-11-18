@@ -49,3 +49,18 @@ skip-check:
   - CKV_AZURE_33
   # SAS expiration policy: Shared Key, hence key-based SAS, is disabled.
   - CKV2_AZURE_41
+  # Geo-redundant replication: the state account is zone-redundant (ZRS) in
+  # one region by design; GZRS/RAGZRS are one input away
+  # (account_replication_type).
+  - CKV_AZURE_206
+  # Blob read logging: needs diagnostic settings to a Log Analytics
+  # workspace, which does not exist when the bootstrap runs; the
+  # storage_account module does not manage diagnostic settings yet
+  # (README §14).
+  - CKV2_AZURE_21
+  # Container public access level: false positive. Checkov cannot resolve
+  # container_access_type through the module's for_each over var.containers.
+  # Containers are private by module default and by bootstrap input (tested);
+  # a public container also needs allow_nested_items_to_be_public = true,
+  # which CKV_AZURE_190 still checks (and passes) on every storage account.
+  - CKV_AZURE_34
